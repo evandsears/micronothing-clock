@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">MicroNothing</string>
+    <string name="widget_description">MicroNothing glanceable technical clock face with weather &amp; calendar</string>
+    <string name="add_widget">Add to Home Screen</string>
+    <string name="weekly_sync">WEEKLY DESIGN SYNC</string>
+    <string name="starting">STARTING</string>
+    <string name="rainy">RAINY</string>
+</resources>
