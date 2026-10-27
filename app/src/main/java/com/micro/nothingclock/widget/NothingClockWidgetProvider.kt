@@ -159,18 +159,22 @@ class NothingClockWidgetProvider : AppWidgetProvider() {
             )
             views.setOnClickPendingIntent(R.id.hotspot_clock, clockPendingIntent)
 
-            // 2. Calendar hotspot -> open calendar
-            val calendarIntent = Intent(Intent.ACTION_VIEW).apply {
-                data = CalendarContract.CONTENT_URI.buildUpon().appendPath("time").build()
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            // 2. Calendar hotspot -> open calendar if calendar rows active, else open clock
+            if (config.showCalendar) {
+                val calendarIntent = Intent(Intent.ACTION_VIEW).apply {
+                    data = CalendarContract.CONTENT_URI.buildUpon().appendPath("time").build()
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                val calendarPendingIntent = PendingIntent.getActivity(
+                    context,
+                    102,
+                    calendarIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                views.setOnClickPendingIntent(R.id.hotspot_calendar, calendarPendingIntent)
+            } else {
+                views.setOnClickPendingIntent(R.id.hotspot_calendar, clockPendingIntent)
             }
-            val calendarPendingIntent = PendingIntent.getActivity(
-                context,
-                102,
-                calendarIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            views.setOnClickPendingIntent(R.id.hotspot_calendar, calendarPendingIntent)
 
             // 3. Root click -> open app settings
             val appIntent = Intent(context, MainActivity::class.java).apply {
@@ -185,6 +189,40 @@ class NothingClockWidgetProvider : AppWidgetProvider() {
             views.setOnClickPendingIntent(R.id.widget_root, appPendingIntent)
 
             return views
+        }
+
+        fun buildPreviewRemoteViews(
+            context: Context,
+            config: WidgetConfig,
+            canvasWidth: Int = 1024,
+            canvasHeight: Int = 461
+        ): RemoteViews {
+            val calendarRepo = CalendarRepository(context)
+            val event = if (!config.showCalendar) {
+                UpcomingCalendarEvent("", -1L, hasEvent = false, isAllDay = false)
+            } else if (config.useLiveCalendar) {
+                calendarRepo.getNextUpcomingEvent(config.fallbackEventTitle, config.fallbackMinutes)
+            } else {
+                val isAllDayFallback = config.fallbackMinutes == -2
+                UpcomingCalendarEvent(
+                    config.fallbackEventTitle,
+                    if (isAllDayFallback) -1L else config.fallbackMinutes.toLong(),
+                    hasEvent = config.fallbackMinutes != -1,
+                    isAllDay = isAllDayFallback
+                )
+            }
+
+            return buildRemoteViews(
+                context = context,
+                config = config,
+                eventTitle = event.title,
+                minutesLeft = event.minutesUntilStart,
+                temp = config.tempCelsius,
+                condition = config.weatherCondition,
+                canvasWidth = canvasWidth,
+                canvasHeight = canvasHeight,
+                isAllDay = event.isAllDay
+            )
         }
 
         fun updateSingleWidget(
@@ -226,11 +264,11 @@ class NothingClockWidgetProvider : AppWidgetProvider() {
             }
 
             // Background live update if live calendar or weather enabled
-            if (config.useLiveCalendar || config.useLiveWeather) {
+            if ((config.showCalendar && config.useLiveCalendar) || config.useLiveWeather) {
                 val calendarRepo = CalendarRepository(context)
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        val nextEvent = if (config.useLiveCalendar) {
+                        val nextEvent = if (config.showCalendar && config.useLiveCalendar) {
                             calendarRepo.getNextUpcomingEvent(config.fallbackEventTitle, config.fallbackMinutes)
                         } else {
                             UpcomingCalendarEvent(
@@ -312,11 +350,11 @@ class NothingClockWidgetProvider : AppWidgetProvider() {
             }
 
             // 2. Background update for live calendar and/or live weather
-            if (config.useLiveCalendar || config.useLiveWeather) {
+            if ((config.showCalendar && config.useLiveCalendar) || config.useLiveWeather) {
                 val calendarRepo = CalendarRepository(context)
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        val nextEvent = if (config.useLiveCalendar) {
+                        val nextEvent = if (config.showCalendar && config.useLiveCalendar) {
                             calendarRepo.getNextUpcomingEvent(config.fallbackEventTitle, config.fallbackMinutes)
                         } else {
                             UpcomingCalendarEvent(

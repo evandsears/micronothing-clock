@@ -1,5 +1,6 @@
 package com.micro.nothingclock.widget
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapShader
@@ -17,35 +18,122 @@ import androidx.core.content.res.ResourcesCompat
 import com.micro.nothingclock.R
 import com.micro.nothingclock.data.ClockThemePreset
 import com.micro.nothingclock.data.WidgetConfig
+import com.micro.nothingclock.data.WidgetFontWeight
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.util.concurrent.ConcurrentHashMap
 
 object NothingClockRenderer {
 
-    private var cachedGeistMono: Typeface? = null
-    private var cachedGeistMonoBold: Typeface? = null
+    private val typefaceCache = ConcurrentHashMap<Int, Typeface>()
+    private var cachedVariableFontFile: File? = null
 
-    fun getGeistTypeface(context: Context?, bold: Boolean = false): Typeface {
-        if (bold && cachedGeistMonoBold != null) return cachedGeistMonoBold!!
-        if (!bold && cachedGeistMono != null) return cachedGeistMono!!
+    @SuppressLint("ResourceType")
+    private fun getVariableFontFile(context: Context): File? {
+        val existing = cachedVariableFontFile
+        if (existing != null && existing.exists() && existing.length() > 0) {
+            return existing
+        }
+        return try {
+            val file = File(context.cacheDir, "geist_mono_variable.ttf")
+            if (!file.exists() || file.length() == 0L) {
+                context.resources.openRawResource(R.font.geist_mono).use { input ->
+                    file.outputStream().use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            }
+            cachedVariableFontFile = file
+            file
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun getGeistTypeface(context: Context?, weight: WidgetFontWeight = WidgetFontWeight.BOLD): Typeface {
+        return getGeistTypeface(context, weight.weight)
+    }
+
+    fun getGeistTypeface(context: Context?, weightInt: Int): Typeface {
+        typefaceCache[weightInt]?.let { return it }
 
         if (context != null) {
+            // 1. Direct static fonts for exact matches when available
+            if (weightInt >= 700) {
+                try {
+                    val tf = ResourcesCompat.getFont(context, R.font.geist_mono_bold)
+                    if (tf != null) {
+                        typefaceCache[weightInt] = tf
+                        return tf
+                    }
+                } catch (_: Exception) {}
+            } else if (weightInt == 400) {
+                try {
+                    val tf = ResourcesCompat.getFont(context, R.font.geist_mono_regular)
+                    if (tf != null) {
+                        typefaceCache[weightInt] = tf
+                        return tf
+                    }
+                } catch (_: Exception) {}
+            }
+
+            // 2. Variable Font variation builder for API 26+ (Oreo+)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                try {
+                    val fontFile = getVariableFontFile(context)
+                    if (fontFile != null && fontFile.exists()) {
+                        val tf = Typeface.Builder(fontFile)
+                            .setFontVariationSettings("'wght' $weightInt")
+                            .setWeight(weightInt)
+                            .build()
+                        if (tf != null) {
+                            typefaceCache[weightInt] = tf
+                            return tf
+                        }
+                    }
+                } catch (_: Exception) {}
+            }
+
+            // 3. Android P (API 28+) Typeface.create with weight on variable font
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                try {
+                    val baseTf = ResourcesCompat.getFont(context, R.font.geist_mono)
+                    if (baseTf != null) {
+                        val tf = Typeface.create(baseTf, weightInt, false)
+                        typefaceCache[weightInt] = tf
+                        return tf
+                    }
+                } catch (_: Exception) {}
+            }
+
+            // 4. Fallback to static font files
             try {
-                val resId = if (bold) R.font.geist_mono_bold else R.font.geist_mono
+                val resId = if (weightInt >= 600) R.font.geist_mono_bold else R.font.geist_mono_regular
                 val tf = ResourcesCompat.getFont(context, resId)
                 if (tf != null) {
-                    if (bold) cachedGeistMonoBold = tf else cachedGeistMono = tf
+                    typefaceCache[weightInt] = tf
                     return tf
                 }
-            } catch (_: Exception) {
-                // Fallback to monospace
-            }
+            } catch (_: Exception) {}
         }
-        return if (bold) Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-        else Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL)
+
+        // 5. System monospace fallback
+        val fallback = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            Typeface.create(Typeface.MONOSPACE, weightInt, false)
+        } else {
+            if (weightInt >= 600) Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            else Typeface.create(Typeface.MONOSPACE, Typeface.NORMAL)
+        }
+        typefaceCache[weightInt] = fallback
+        return fallback
+    }
+
+    fun getGeistTypeface(context: Context?, bold: Boolean): Typeface {
+        return getGeistTypeface(context, if (bold) WidgetFontWeight.BOLD else WidgetFontWeight.REGULAR)
     }
 
     fun calculateHandGestures(minutes: Long, isAllDay: Boolean = false): String {
@@ -62,7 +150,13 @@ object NothingClockRenderer {
                 else -> "🖐️"
             }
         }
-        return "$emojis (${minutes}MIN)"
+        val label = if (minutes >= 60) {
+            val hours = ((minutes + 30) / 60).coerceAtLeast(1)
+            if (hours <= 1L) "1 HOUR" else "$hours HOURS"
+        } else {
+            "${minutes}MIN"
+        }
+        return "$emojis ($label)"
     }
 
     fun getDayDrawableRes(day: Int): Int {
@@ -142,7 +236,9 @@ object NothingClockRenderer {
     fun getWeatherSpecDrawableRes(condition: String): Int {
         val c = condition.uppercase().trim()
         return when {
-            c.contains("SUN") || c.contains("CLEAR") -> R.drawable.ic_nothing_weather_sunny
+            c.contains("CLEAR NIGHT") || c.contains("NIGHT") || c.contains("MOON") -> R.drawable.ic_nothing_weather_clear_night
+            c.contains("CLEAR") -> R.drawable.ic_nothing_weather_clear
+            c.contains("SUN") -> R.drawable.ic_nothing_weather_sunny
             c.contains("RAIN") || c.contains("DRIZZLE") || c.contains("SHOWER") -> R.drawable.ic_nothing_weather_rain
             c.contains("CLOUD") || c.contains("OVERCAST") || c.contains("FOG") -> R.drawable.ic_nothing_weather_cloud
             c.contains("SNOW") || c.contains("BLIZZARD") || c.contains("ICE") || c.contains("FLURRY") -> R.drawable.ic_nothing_weather_snow
@@ -163,6 +259,29 @@ object NothingClockRenderer {
         if (isAllDay) return listOf(R.drawable.ic_nothing_marker_2)
         if (minutes < 0) return listOf(R.drawable.ic_nothing_marker_2) // Peace sign for open day!
         if (minutes == 0L) return listOf(R.drawable.ic_nothing_marker_1)
+
+        if (minutes >= 60) {
+            val hours = ((minutes + 30) / 60).coerceAtLeast(1)
+            val list = mutableListOf<Int>()
+            if (hours <= 5) {
+                list.add(getMarkerForDigit(hours.toInt()))
+            } else if (hours <= 9) {
+                list.add(R.drawable.ic_nothing_marker_5)
+                list.add(getMarkerForDigit((hours - 5).toInt()))
+            } else {
+                val tens = (hours / 10).toInt().coerceIn(1, 5)
+                val units = (hours % 10).toInt()
+                list.add(getMarkerForDigit(tens))
+                when (units) {
+                    in 1..5 -> list.add(getMarkerForDigit(units))
+                    in 6..9 -> {
+                        list.add(R.drawable.ic_nothing_marker_5)
+                        list.add(getMarkerForDigit(units - 5))
+                    }
+                }
+            }
+            return list
+        }
 
         val list = mutableListOf<Int>()
         val tens = (minutes / 10).toInt().coerceIn(0, 5)
@@ -227,66 +346,6 @@ object NothingClockRenderer {
         canvas.restore()
 
         return finalW
-    }
-
-    /**
-     * Splits an event title into two lines for responsive tall widgets.
-     * Line 1 gets as many whole words as can fit within maxWidth1.
-     * Line 2 gets the remaining words (or is truncated with '…' if it exceeds maxWidth2).
-     */
-    fun splitEventIntoTwoLines(
-        text: String,
-        paint: Paint,
-        maxWidth1: Float,
-        maxWidth2: Float
-    ): Pair<String, String> {
-        val words = text.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
-        if (words.isEmpty()) return Pair("", "")
-        if (words.size == 1) {
-            val charsFit = paint.breakText(words[0], true, maxWidth1, null)
-            val l1 = words[0].substring(0, charsFit.coerceAtLeast(1))
-            var l2 = words[0].substring(charsFit.coerceAtLeast(1)).trim()
-            if (l2.isNotEmpty() && paint.measureText(l2) > maxWidth2) {
-                val fit2 = paint.breakText(l2, true, maxWidth2, null)
-                l2 = l2.substring(0, (fit2 - 1).coerceAtLeast(0)) + "…"
-            }
-            return Pair(l1, l2)
-        }
-
-        var line1 = ""
-        var breakIndex = 0
-
-        for (i in words.indices) {
-            val candidate = if (line1.isEmpty()) words[i] else "$line1 ${words[i]}"
-            if (paint.measureText(candidate) <= maxWidth1) {
-                line1 = candidate
-                breakIndex = i + 1
-            } else {
-                break
-            }
-        }
-
-        // If even the first word does not fit in line 1:
-        if (line1.isEmpty()) {
-            val charsFit = paint.breakText(words[0], true, maxWidth1, null)
-            line1 = words[0].substring(0, charsFit.coerceAtLeast(1))
-            val restOfFirst = words[0].substring(charsFit.coerceAtLeast(1)).trim()
-            val remaining = (if (restOfFirst.isNotEmpty()) listOf(restOfFirst) else emptyList()) + words.drop(1)
-            var line2 = remaining.joinToString(" ")
-            if (paint.measureText(line2) > maxWidth2) {
-                val fit2 = paint.breakText(line2, true, maxWidth2, null)
-                line2 = line2.substring(0, (fit2 - 1).coerceAtLeast(0)) + "…"
-            }
-            return Pair(line1, line2)
-        }
-
-        val remainingWords = words.subList(breakIndex, words.size)
-        var line2 = remainingWords.joinToString(" ")
-        if (paint.measureText(line2) > maxWidth2) {
-            val fit2 = paint.breakText(line2, true, maxWidth2, null)
-            line2 = line2.substring(0, (fit2 - 1).coerceAtLeast(0)) + "…"
-        }
-        return Pair(line1, line2)
     }
 
     private fun drawBlueprintGrid(canvas: Canvas, width: Float, height: Float, cornerRadius: Float) {
@@ -457,7 +516,7 @@ object NothingClockRenderer {
         val bitmap = Bitmap.createBitmap(safeW, safeH, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
-        val geistMonoBold = getGeistTypeface(context, bold = true)
+        val geistMonoTypeface = getGeistTypeface(context, config.fontWeight)
 
         // Resolve Theme, Surface & Contrast Legibility
         var cardBgColor: Int = Color.TRANSPARENT
@@ -563,61 +622,30 @@ object NothingClockRenderer {
         }
         val availableHeight = (safeH - topPadding - bottomPadding).coerceAtLeast(80f)
 
-        val isTallEnough = heightRatio >= 0.55f
-
-        // Initial measurement for event title length
+        val showCalendar = config.showCalendar
         val displayEvent = eventTitle.uppercase().trim()
-        val tentativeRowHeight = availableHeight / 4.0f
-        val tentativeFontSize = (tentativeRowHeight * 0.62f).coerceIn(16f, safeW * 0.058f)
-        val tentativeBadgeHeight = (tentativeFontSize * 1.18f).coerceIn(20f, (tentativeRowHeight * 0.78f).coerceAtLeast(22f))
 
-        val tentativePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            typeface = geistMonoBold
-            textSize = tentativeFontSize
-            letterSpacing = 0.04f
-        }
-        val followupEstWidth = tentativeBadgeHeight * (16f / 11f)
-        val speakEstWidth = tentativeBadgeHeight * 0.88f
-        val singleLineMaxWidth = (contentRight - (contentLeft + speakEstWidth + safeW * 0.024f) - followupEstWidth - safeW * 0.028f).coerceAtLeast(safeW * 0.2f)
-        val isTwoLineEvent = isTallEnough && tentativePaint.measureText(displayEvent) > singleLineMaxWidth
-
-        // Row Heights and centers: for square or tall aspect ratios (heightRatio >= 0.70f),
-        // we bound row spacing so rows don't stretch apart awkwardly, and center the clock block vertically.
-        val isSquareOrTall = heightRatio >= 0.70f
-        val rawUnit = if (isTwoLineEvent) (availableHeight / 4.6f) else (availableHeight / 4.0f)
-        val baseFontSize = (rawUnit * 0.62f).coerceIn(16f, safeW * 0.058f)
+        // Row Heights and centers:
+        // Tighten the line-height / row spacing slightly (~11% closer) so lines sit closer together
+        // with cohesive Nothing OS typography, bounded by maxRowSpacing on tall aspect ratios,
+        // and centered vertically within the card.
+        val numRows = if (!showCalendar) 2.0f else 4.0f
+        val rawUnit = availableHeight / numRows
+        val maxFontSize = if (!showCalendar) safeW * 0.062f else safeW * 0.058f
+        val baseFontSize = (rawUnit * 0.62f).coerceIn(16f, maxFontSize)
         val badgeHeight = (baseFontSize * 1.18f).coerceIn(20f, (rawUnit * 0.80f).coerceAtLeast(22f))
 
-        val maxRowSpacing = baseFontSize * 2.15f
-        val rowHeight = if (isSquareOrTall) rawUnit.coerceAtMost(maxRowSpacing) else rawUnit
-        val totalBlockHeight = rowHeight * (if (isTwoLineEvent) 4.6f else 4.0f)
-        val verticalOffset = if (isSquareOrTall) ((availableHeight - totalBlockHeight) / 2f).coerceAtLeast(0f) else 0f
+        val maxRowSpacing = baseFontSize * 1.52f
+        val compactUnit = rawUnit * 0.89f
+        val rowHeight = compactUnit.coerceAtMost(maxRowSpacing)
+        val totalBlockHeight = rowHeight * numRows
+        val verticalOffset = ((availableHeight - totalBlockHeight) / 2f).coerceAtLeast(0f)
         val effectiveTop = topPadding + verticalOffset
 
-        val row1CenterY: Float
-        val row2CenterY: Float
-        val row3CenterY: Float
-        val eventLine1CenterY: Float
-        val eventLine2CenterY: Float
-        val row4CenterY: Float
-
-        if (isTwoLineEvent) {
-            row1CenterY = effectiveTop + rowHeight * 0.5f
-            row2CenterY = effectiveTop + rowHeight * 1.5f
-            val eventCenterY = effectiveTop + rowHeight * 2.8f
-            row4CenterY = effectiveTop + rowHeight * 4.1f
-            val lineSpacing = (baseFontSize * 1.35f).coerceAtMost(rowHeight * 0.75f)
-            eventLine1CenterY = eventCenterY - lineSpacing * 0.5f
-            eventLine2CenterY = eventCenterY + lineSpacing * 0.5f
-            row3CenterY = eventCenterY
-        } else {
-            row1CenterY = effectiveTop + rowHeight * 0.5f
-            row2CenterY = effectiveTop + rowHeight * 1.5f
-            row3CenterY = effectiveTop + rowHeight * 2.5f
-            row4CenterY = effectiveTop + rowHeight * 3.5f
-            eventLine1CenterY = row3CenterY
-            eventLine2CenterY = row3CenterY
-        }
+        val row1CenterY = effectiveTop + rowHeight * 0.5f
+        val row2CenterY = effectiveTop + rowHeight * 1.5f
+        val row3CenterY = if (showCalendar) effectiveTop + rowHeight * 2.5f else 0f
+        val row4CenterY = if (showCalendar) effectiveTop + rowHeight * 3.5f else 0f
 
         val calendar = Calendar.getInstance()
         val dayOfWeekFormat = SimpleDateFormat("EEE", Locale.US)
@@ -635,7 +663,7 @@ object NothingClockRenderer {
         val tzAbbr = tz.getDisplayName(isDst, TimeZone.SHORT, Locale.US).uppercase()
 
         val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            typeface = geistMonoBold
+            typeface = geistMonoTypeface
             color = textColor
             textSize = baseFontSize
             letterSpacing = 0.04f
@@ -668,7 +696,7 @@ object NothingClockRenderer {
             // Render Starburst Base with dynamic timezone text
             val tzW = drawAsset(context, canvas, R.drawable.ic_nothing_timezone_base, cursorX, row1CenterY, targetHeight = badgeHeight * 1.05f, tintColor = pillBgColor)
             val tzTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                typeface = geistMonoBold
+                typeface = geistMonoTypeface
                 color = pillTextColor
                 textSize = badgeHeight * 0.40f
                 textAlign = Paint.Align.CENTER
@@ -724,16 +752,18 @@ object NothingClockRenderer {
         val specRes = getWeatherSpecDrawableRes(condition)
         drawAsset(context, canvas, specRes, cursorX, row2CenterY, targetHeight = badgeHeight, tintColor = textColor)
 
-        // ================= ROW 3: [Speak] EVENT OR QUIPPY PLACEHOLDER ( ➔ ) =================
-        if (!isTwoLineEvent) {
+        // ================= ROWS 3 & 4: CALENDAR EVENT & COUNTDOWN =================
+        if (showCalendar) {
+            // ================= ROW 3: [Speak] EVENT OR QUIPPY PLACEHOLDER ( ➔ ) =================
             cursorX = contentLeft
 
             // 1. Speaking Head Profile Icon with Waves
             val speakW = drawAsset(context, canvas, R.drawable.ic_nothing_speak, cursorX, row3CenterY, targetHeight = badgeHeight * 0.88f, tintColor = textColor)
             cursorX += speakW + safeW * 0.024f
 
-            // 2. Event Title or Quippy Placeholder
-            val maxEventWidth = (contentRight - cursorX - followupEstWidth - safeW * 0.028f).coerceAtLeast(safeW * 0.2f)
+            // 2. Event Title or Quippy Placeholder (clean single-line with ellipsis)
+            val followupWidth = badgeHeight * (16f / 11f)
+            val maxEventWidth = (contentRight - cursorX - followupWidth - safeW * 0.028f).coerceAtLeast(safeW * 0.2f)
             val truncatedLength = textPaint.breakText(displayEvent, true, maxEventWidth, null)
             val finalEventText = if (truncatedLength < displayEvent.length) {
                 displayEvent.substring(0, (truncatedLength - 1).coerceAtLeast(0)) + "…"
@@ -745,83 +775,73 @@ object NothingClockRenderer {
 
             // 3. Action Badge Arrow Pill ( ➔ )
             drawAsset(context, canvas, R.drawable.ic_nothing_followup, cursorX, row3CenterY, targetHeight = badgeHeight, tintColor = pillBgColor)
-        } else {
-            // Two-line responsive event layout for tall widgets
-            val maxLineWidth1 = contentRight - (contentLeft + speakEstWidth + safeW * 0.024f)
-            val maxLineWidth2 = contentRight - (contentLeft + speakEstWidth + safeW * 0.024f) - followupEstWidth - safeW * 0.028f
 
-            val (line1, line2) = splitEventIntoTwoLines(displayEvent, textPaint, maxLineWidth1, maxLineWidth2)
-
+            // ================= ROW 4: STARTING [Hand1] [Hand5] └────── 6MIN =================
             cursorX = contentLeft
 
-            // Line 1: Speak icon + Line 1 text
-            val actualSpeakW = drawAsset(context, canvas, R.drawable.ic_nothing_speak, cursorX, eventLine1CenterY, targetHeight = badgeHeight * 0.88f, tintColor = textColor)
-            val textStartX = cursorX + actualSpeakW + safeW * 0.024f
-            canvas.drawText(line1, textStartX, eventLine1CenterY + textBaselineOffset, textPaint)
+            val isEventActive = minutesLeft >= 0
 
-            // Line 2: Line 2 text (indented to align with Line 1 text) + Followup Arrow Pill
-            canvas.drawText(line2, textStartX, eventLine2CenterY + textBaselineOffset, textPaint)
-            val arrowX = textStartX + textPaint.measureText(line2) + safeW * 0.024f
-            drawAsset(context, canvas, R.drawable.ic_nothing_followup, arrowX, eventLine2CenterY, targetHeight = badgeHeight, tintColor = pillBgColor)
+            // 1. Status Label: "STARTING" when meeting upcoming, "ALL DAY" when all-day event, or "ALL CLEAR" when open
+            val statusLabel = when {
+                isAllDay -> "ALL DAY"
+                isEventActive -> "STARTING"
+                else -> "ALL CLEAR"
+            }
+            canvas.drawText(statusLabel, cursorX, row4CenterY + textBaselineOffset, textPaint)
+            cursorX += textPaint.measureText(statusLabel) + safeW * 0.028f
+
+            // 2. Hand Gesture Tally Badges
+            val handDrawables = getHandMarkerDrawables(minutesLeft, isAllDay)
+            for (hRes in handDrawables) {
+                val hW = drawAsset(context, canvas, hRes, cursorX, row4CenterY, targetHeight = badgeHeight * 0.90f, tintColor = pillBgColor)
+                cursorX += hW + safeW * 0.016f
+            }
+            cursorX += safeW * 0.018f
+
+            // 3. Cradle Bracket Underline & Countdown / Status Text
+            val countdownText = when {
+                isAllDay -> "TODAY"
+                isEventActive -> {
+                    if (minutesLeft >= 60) {
+                        val hours = ((minutesLeft + 30) / 60).coerceAtLeast(1)
+                        if (hours <= 1L) "1 HOUR" else "$hours HOURS"
+                    } else {
+                        "${minutesLeft}MIN"
+                    }
+                }
+                else -> "OPEN"
+            }
+            val minWidth = textPaint.measureText(countdownText)
+            val cradleHeight = baseFontSize * 1.05f
+
+            // Draw the authentic L-bracket cradle
+            val cradleCornerW = drawAsset(
+                context,
+                canvas,
+                R.drawable.ic_nothing_cradle,
+                cursorX,
+                row4CenterY + cradleHeight * 0.04f,
+                targetHeight = cradleHeight,
+                tintColor = textColor
+            )
+
+            // Underline line extending under and past the countdown text
+            val baselineY = row4CenterY + cradleHeight * 0.50f
+            val lineWeightRatio = (config.fontWeight.weight.toFloat() / 700f).coerceIn(0.65f, 1.0f)
+            val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = textColor
+                style = Paint.Style.STROKE
+                strokeWidth = (baseFontSize * 0.08f * lineWeightRatio).coerceIn(2.0f, 6.0f)
+                strokeCap = Paint.Cap.ROUND
+            }
+            val textStartX = cursorX + cradleCornerW * 0.75f
+            val lineEndX = (textStartX + minWidth + safeW * 0.022f).coerceAtMost(contentRight)
+
+            canvas.drawLine(textStartX, baselineY, lineEndX, baselineY, linePaint)
+
+            // Draw Countdown / Open text resting inside the cradle
+            canvas.drawText(countdownText, textStartX + safeW * 0.005f, row4CenterY + textBaselineOffset - cradleHeight * 0.02f, textPaint)
         }
-
-        // ================= ROW 4: STARTING [Hand1] [Hand5] └────── 6MIN =================
-        cursorX = contentLeft
-
-        val isEventActive = minutesLeft >= 0
-
-        // 1. Status Label: "STARTING" when meeting upcoming, "ALL DAY" when all-day event, or "ALL CLEAR" when open
-        val statusLabel = when {
-            isAllDay -> "ALL DAY"
-            isEventActive -> "STARTING"
-            else -> "ALL CLEAR"
-        }
-        canvas.drawText(statusLabel, cursorX, row4CenterY + textBaselineOffset, textPaint)
-        cursorX += textPaint.measureText(statusLabel) + safeW * 0.028f
-
-        // 2. Hand Gesture Tally Badges
-        val handDrawables = getHandMarkerDrawables(minutesLeft, isAllDay)
-        for (hRes in handDrawables) {
-            val hW = drawAsset(context, canvas, hRes, cursorX, row4CenterY, targetHeight = badgeHeight * 0.90f, tintColor = pillBgColor)
-            cursorX += hW + safeW * 0.016f
-        }
-        cursorX += safeW * 0.018f
-
-        // 3. Cradle Bracket Underline & Countdown / Status Text
-        val countdownText = when {
-            isAllDay -> "TODAY"
-            isEventActive -> "${minutesLeft}MIN"
-            else -> "OPEN"
-        }
-        val minWidth = textPaint.measureText(countdownText)
-        val cradleHeight = baseFontSize * 1.05f
-
-        // Draw the authentic L-bracket cradle
-        val cradleCornerW = drawAsset(
-            context,
-            canvas,
-            R.drawable.ic_nothing_cradle,
-            cursorX,
-            row4CenterY + cradleHeight * 0.04f,
-            targetHeight = cradleHeight,
-            tintColor = textColor
-        )
-
-        // Underline line extending under and past the countdown text
-        val baselineY = row4CenterY + cradleHeight * 0.50f
-        val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = textColor
-            style = Paint.Style.STROKE
-            strokeWidth = (baseFontSize * 0.08f).coerceIn(2.5f, 6.0f)
-            strokeCap = Paint.Cap.ROUND
-        }
-        val textStartX = cursorX + cradleCornerW * 0.75f
-        val lineEndX = (textStartX + minWidth + safeW * 0.022f).coerceAtMost(contentRight)
-
-        canvas.drawLine(textStartX, baselineY, lineEndX, baselineY, linePaint)
-
-        // Draw Countdown / Open text resting inside the cradle
-        canvas.drawText(countdownText, textStartX + safeW * 0.005f, row4CenterY + textBaselineOffset - cradleHeight * 0.02f, textPaint)
 
         return bitmap
     }

@@ -61,6 +61,13 @@ class CalendarRepository(private val context: Context) {
             localCal.set(Calendar.MILLISECOND, 0)
             val startOfTodayLocal = localCal.timeInMillis
 
+            // Local end of today
+            localCal.set(Calendar.HOUR_OF_DAY, 23)
+            localCal.set(Calendar.MINUTE, 59)
+            localCal.set(Calendar.SECOND, 59)
+            localCal.set(Calendar.MILLISECOND, 999)
+            val endOfTodayLocal = localCal.timeInMillis
+
             // UTC midnight of today (Android Calendar stores all-day events in UTC)
             val todayUtc = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
                 clear()
@@ -97,7 +104,7 @@ class CalendarRepository(private val context: Context) {
                 "${CalendarContract.Instances.BEGIN} ASC"
             )
 
-            var upcomingHourEvent: UpcomingCalendarEvent? = null
+            var upcomingEvent: UpcomingCalendarEvent? = null
             val allDayEvents = mutableListOf<String>()
 
             cursor?.use {
@@ -119,36 +126,34 @@ class CalendarRepository(private val context: Context) {
                     }
 
                     // Timed event:
-                    // Check if event is ongoing right now or starting in the next 60 minutes
-                    if (upcomingHourEvent == null) {
+                    // Check if event is ongoing right now or upcoming
+                    if (upcomingEvent == null) {
                         if (now in begin until end) {
                             // Ongoing meeting happening right now
-                            upcomingHourEvent = UpcomingCalendarEvent(title.uppercase(), 0L, hasEvent = true, isAllDay = false)
-                        } else {
+                            upcomingEvent = UpcomingCalendarEvent(title.uppercase(), 0L, hasEvent = true, isAllDay = false)
+                        } else if (begin > now) {
                             val diffMillis = begin - now
-                            if (diffMillis >= 0) {
-                                val minutes = diffMillis / (1000 * 60)
-                                if (minutes in 0..60) {
-                                    upcomingHourEvent = UpcomingCalendarEvent(title.uppercase(), minutes, hasEvent = true, isAllDay = false)
-                                }
+                            val minutes = diffMillis / (1000 * 60)
+                            // Include event if it starts within the next hour, starts today, or starts within 6 hours
+                            if (minutes in 0..60 || begin <= endOfTodayLocal || diffMillis <= 6 * 60 * 60 * 1000L) {
+                                upcomingEvent = UpcomingCalendarEvent(title.uppercase(), minutes, hasEvent = true, isAllDay = false)
                             }
                         }
                     }
                 }
             }
 
-            // 1. If there's an event in the next hour, display it
-            if (upcomingHourEvent != null) {
-                return upcomingHourEvent
+            // 1. If there's an ongoing or upcoming event, display it
+            if (upcomingEvent != null) {
+                return upcomingEvent
             }
 
-            // 2. If there's no event in the next hour:
-            // Display any all-day event if present
+            // 2. If there are no upcoming timed events, display any all-day event if present for today
             if (allDayEvents.isNotEmpty()) {
                 return UpcomingCalendarEvent(allDayEvents.first(), -1L, hasEvent = true, isAllDay = true)
             }
 
-            // 3. Otherwise display the default quippy placeholder
+            // 3. Otherwise the day is clear -> display the default quippy placeholder
             val quippy = quippyPlaceholders[(now / (1000 * 60 * 60) % quippyPlaceholders.size).toInt()]
             UpcomingCalendarEvent(quippy, -1L, hasEvent = false, isAllDay = false)
         } catch (e: Exception) {

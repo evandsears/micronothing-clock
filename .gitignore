@@ -10,4 +10,6 @@
 .cxx
 *.apk
 *.aab
+/app/release/
 .kotlin
+_promocodes/

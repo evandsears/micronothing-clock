@@ -124,7 +124,7 @@ class WeatherRepository(private val context: Context? = null) {
         try {
             val tempUnitParam = if (isFahrenheit) "temperature_unit=fahrenheit" else "temperature_unit=celsius"
             val endpoint =
-                "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m,weather_code,wind_speed_10m&$tempUnitParam&wind_speed_unit=kmh"
+                "https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m,weather_code,wind_speed_10m,is_day&$tempUnitParam&wind_speed_unit=kmh"
             val url = URL(endpoint)
             val connection = (url.openConnection() as HttpURLConnection).apply {
                 connectTimeout = 5000
@@ -153,8 +153,9 @@ class WeatherRepository(private val context: Context? = null) {
                     if (!tempDouble.isNaN()) {
                         val weatherCode = current.optInt("weather_code", current.optInt("weathercode", 0))
                         val windSpeed = current.optDouble("wind_speed_10m", current.optDouble("windspeed", 0.0))
+                        val isDay = current.optInt("is_day", 1) == 1
 
-                        val cond = mapWeatherCodeToNothingCondition(weatherCode, windSpeed)
+                        val cond = mapWeatherCodeToNothingCondition(weatherCode, windSpeed, isDay)
                         val finalTemp = tempDouble.roundToInt()
 
                         // Cache successful weather with timestamp & coordinates
@@ -227,12 +228,12 @@ class WeatherRepository(private val context: Context? = null) {
      * 95: Thunderstorm
      * 96, 99: Thunderstorm with hail
      */
-    fun mapWeatherCodeToNothingCondition(code: Int, windSpeedKmH: Double = 0.0): String {
+    fun mapWeatherCodeToNothingCondition(code: Int, windSpeedKmH: Double = 0.0, isDay: Boolean = true): String {
         // Severe winds (> 85 km/h / 53 mph) override to STORM
         if (windSpeedKmH > 85.0) return "STORM"
 
         return when (code) {
-            0, 1 -> if (windSpeedKmH > 35.0) "BREEZY" else "SUNNY"
+            0, 1 -> if (windSpeedKmH > 35.0) "BREEZY" else if (isDay) "SUNNY" else "CLEAR NIGHT"
             2, 3 -> if (windSpeedKmH > 35.0) "BREEZY" else "CLOUDY"
             45, 48 -> "HAZE"
             51, 53, 55 -> "RAINY"
@@ -244,7 +245,7 @@ class WeatherRepository(private val context: Context? = null) {
             85, 86 -> "SNOW"
             95 -> "THUNDER"
             96, 99 -> "STORM"
-            else -> if (windSpeedKmH > 35.0) "BREEZY" else "SUNNY"
+            else -> if (windSpeedKmH > 35.0) "BREEZY" else if (isDay) "SUNNY" else "CLEAR NIGHT"
         }
     }
 }

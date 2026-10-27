@@ -9,7 +9,8 @@
     android:minResizeHeight="70dp"
     android:updatePeriodMillis="1800000"
     android:initialLayout="@layout/widget_nothing_clock"
-    android:previewLayout="@layout/widget_nothing_clock"
+    android:previewLayout="@layout/widget_nothing_clock_preview"
+    android:previewImage="@drawable/widget_preview"
     android:description="@string/widget_description"
     android:widgetCategory="home_screen|keyguard">
 </appwidget-provider>
