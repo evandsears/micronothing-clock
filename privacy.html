@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — MicroNothing Clock</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Geist Mono', monospace;
+      background-color: #0c0d0e;
+      color: #e5e5e5;
+    }
+    .technical-grid {
+      background-image: 
+        radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.08) 1px, transparent 0);
+      background-size: 24px 24px;
+    }
+    .red-accent {
+      color: #D71920;
+    }
+    .card-border {
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+  </style>
+</head>
+<body class="min-h-screen technical-grid selection:bg-red-900 selection:text-white flex flex-col items-center py-12 px-4 sm:px-6">
+
+  <!-- Header Container -->
+  <header class="max-w-3xl w-full text-center mb-10">
+    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-neutral-700 bg-neutral-900/80 text-xs font-medium tracking-wider uppercase mb-6 text-neutral-400">
+      <span class="w-2 h-2 rounded-full bg-red-accent animate-pulse"></span>
+      Legal Disclosure
+    </div>
+    
+    <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight uppercase mb-3 text-white">
+      Privacy <span class="red-accent">Policy</span>
+    </h1>
+    <p class="text-neutral-400 text-xs sm:text-sm max-w-lg mx-auto">
+      MicroNothing Clock for Android &middot; Last updated: October 28, 2026
+    </p>
+  </header>
+
+  <!-- Content Container -->
+  <main class="max-w-3xl w-full space-y-6 text-sm text-neutral-300 leading-relaxed">
+
+    <!-- Section 1: Overview -->
+    <section class="bg-neutral-950/90 rounded-2xl p-6 sm:p-8 card-border backdrop-blur-md">
+      <h2 class="text-lg font-bold text-white uppercase tracking-wider mb-3 flex items-center gap-2">
+        <span class="text-red-accent">01.</span> Overview & Core Philosophy
+      </h2>
+      <p class="mb-3">
+        <strong>MicroNothing Clock</strong> is built with a privacy-first, on-device architecture. We believe your personal schedule, to-dos, and ambient clock data belong strictly to you.
+      </p>
+      <p class="text-neutral-400 text-xs sm:text-sm">
+        The app does not operate remote user tracking servers, does not maintain user accounts on proprietary databases, does not sell or share personal data with third parties, and does not serve behavioral advertisements.
+      </p>
+    </section>
+
+    <!-- Section 2: Google Tasks API & User Data Policy -->
+    <section class="bg-neutral-950/90 rounded-2xl p-6 sm:p-8 card-border backdrop-blur-md">
+      <h2 class="text-lg font-bold text-white uppercase tracking-wider mb-3 flex items-center gap-2">
+        <span class="text-red-accent">02.</span> Google Tasks API Data & Limited Use Disclosure
+      </h2>
+      <p class="mb-3">
+        MicroNothing Clock provides an optional feature allowing users to connect their Google Account to display upcoming and due tasks directly on their home screen widget.
+      </p>
+      <ul class="list-disc list-inside space-y-2 text-xs sm:text-sm text-neutral-300 pl-2 mb-4">
+        <li><strong>Scope Requested:</strong> <code class="text-xs bg-neutral-900 px-2 py-0.5 rounded border border-neutral-800 text-neutral-200">https://www.googleapis.com/auth/tasks.readonly</code></li>
+        <li><strong>Purpose of Access:</strong> The app queries your Google Tasks solely to display the title, due date, and completion status of your upcoming to-dos within the widget interface (Row 3 and Row 4).</li>
+        <li><strong>Local Storage:</strong> Retrieved task titles and due dates are cached locally on your device in secure, sandboxed application storage (<code class="text-xs bg-neutral-900 px-1 py-0.5 rounded text-neutral-300">SharedPreferences</code>) to allow instant, offline widget rendering without unnecessary battery or network consumption.</li>
+        <li><strong>Zero External Transmission:</strong> Your Google Tasks data is never uploaded, transferred, or backed up to any developer-owned or third-party servers. All API requests travel directly between your device and Google's official endpoints (<code class="text-xs bg-neutral-900 px-1 py-0.5 rounded text-neutral-300">tasks.googleapis.com</code>).</li>
+        <li><strong>Revocation:</strong> You can disconnect Google Tasks at any time from the app's Calendar & Agenda settings, which immediately clears all cached tasks and signs out your account.</li>
+      </ul>
+      <div class="p-4 rounded-xl bg-neutral-900/80 border border-neutral-800 text-xs text-neutral-400">
+        <strong class="text-neutral-200">Google API Services User Data Policy Compliance:</strong> MicroNothing Clock's use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener" class="underline text-red-accent hover:text-red-400">Google API Services User Data Policy</a>, including the Limited Use requirements.
+      </div>
+    </section>
+
+    <!-- Section 3: Device Calendar Data -->
+    <section class="bg-neutral-950/90 rounded-2xl p-6 sm:p-8 card-border backdrop-blur-md">
+      <h2 class="text-lg font-bold text-white uppercase tracking-wider mb-3 flex items-center gap-2">
+        <span class="text-red-accent">03.</span> Device Calendar Data
+      </h2>
+      <p class="mb-3">
+        If you grant the standard Android <code class="text-xs bg-neutral-900 px-2 py-0.5 rounded border border-neutral-800 text-neutral-200">READ_CALENDAR</code> permission, MicroNothing Clock reads your device's local calendar database (<code class="text-xs bg-neutral-900 px-1 py-0.5 rounded text-neutral-300">CalendarContract</code>) to detect upcoming events today and calculate start time countdowns.
+      </p>
+      <p class="text-neutral-400 text-xs sm:text-sm">
+        This calendar data is read entirely on your physical device, rendered directly to the widget canvas, and is never transmitted over the internet or collected externally.
+      </p>
+    </section>
+
+    <!-- Section 4: Location & Weather Data -->
+    <section class="bg-neutral-950/90 rounded-2xl p-6 sm:p-8 card-border backdrop-blur-md">
+      <h2 class="text-lg font-bold text-white uppercase tracking-wider mb-3 flex items-center gap-2">
+        <span class="text-red-accent">04.</span> Location & Weather Information
+      </h2>
+      <p class="mb-3">
+        When Live Weather is enabled, the app requests coarse/approximate location (<code class="text-xs bg-neutral-900 px-2 py-0.5 rounded border border-neutral-800 text-neutral-200">ACCESS_COARSE_LOCATION</code>) to determine your local latitude and longitude.
+      </p>
+      <p class="text-neutral-400 text-xs sm:text-sm">
+        These coordinates are used solely to query current temperature and weather conditions from open weather endpoints (e.g. Open-Meteo). Location coordinates are never tracked, stored in location histories, or shared with advertisers.
+      </p>
+    </section>
+
+    <!-- Section 5: Exact Alarms & System Permissions -->
+    <section class="bg-neutral-950/90 rounded-2xl p-6 sm:p-8 card-border backdrop-blur-md">
+      <h2 class="text-lg font-bold text-white uppercase tracking-wider mb-3 flex items-center gap-2">
+        <span class="text-red-accent">05.</span> System Permissions
+      </h2>
+      <ul class="list-disc list-inside space-y-2 text-xs sm:text-sm text-neutral-300 pl-2">
+        <li><strong>SCHEDULE_EXACT_ALARM:</strong> Used to wake the device at the exact minute boundary (:00 seconds) to guarantee the widget digital clock remains perfectly synchronized with system time.</li>
+        <li><strong>RECEIVE_BOOT_COMPLETED:</strong> Restores widget alarms and schedules immediately after device reboot.</li>
+        <li><strong>INTERNET & ACCESS_NETWORK_STATE:</strong> Used exclusively to fetch weather forecasts and communicate directly with Google Tasks APIs upon user authorization.</li>
+      </ul>
+    </section>
+
+    <!-- Section 6: Contact Information -->
+    <section class="bg-neutral-950/90 rounded-2xl p-6 sm:p-8 card-border backdrop-blur-md">
+      <h2 class="text-lg font-bold text-white uppercase tracking-wider mb-3 flex items-center gap-2">
+        <span class="text-red-accent">06.</span> Developer Contact & Inquiries
+      </h2>
+      <p class="mb-3 text-xs sm:text-sm">
+        If you have any questions or feedback regarding this Privacy Policy or your data, please contact:
+      </p>
+      <div class="p-4 rounded-xl bg-neutral-900 border border-neutral-800 inline-block text-xs sm:text-sm">
+        <span class="text-neutral-400">Developer:</span> <strong class="text-white">Evan Sears</strong><br>
+        <span class="text-neutral-400">Email:</span> <a href="mailto:evandsears@gmail.com" class="text-red-accent underline hover:text-red-400">evandsears@gmail.com</a><br>
+        <span class="text-neutral-400">Repository:</span> <a href="https://github.com/evandsears/micronothing-clock" target="_blank" rel="noopener" class="text-neutral-300 underline hover:text-white">github.com/evandsears/micronothing-clock</a>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer Navigation -->
+  <footer class="max-w-3xl w-full text-center mt-12 pt-6 border-t border-neutral-800 text-xs text-neutral-500 flex flex-col sm:flex-row justify-between items-center gap-4">
+    <div>&copy; 2026 MicroNothing Clock. All rights reserved.</div>
+    <div class="flex items-center gap-4">
+      <a href="index.html" class="hover:text-neutral-300 transition-colors">Beta Home</a>
+      <span>&middot;</span>
+      <a href="terms.html" class="hover:text-neutral-300 transition-colors">Terms of Service</a>
+      <span>&middot;</span>
+      <a href="privacy.html" class="text-neutral-300">Privacy Policy</a>
+    </div>
+  </footer>
+
+</body>
+</html>
