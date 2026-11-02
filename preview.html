@@ -159,11 +159,11 @@
           <!-- Cradle Bracket with text resting on top -->
           <div class="flex items-end h-full relative pl-1">
             <div class="h-[75%] flex items-end">
-              <svg class="svg-icon h-full w-auto inline-block -mr-1" height="8" viewBox="0 0 23 8" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M1.656 4.36364C1.656 6.1101 3.04042 7.53687 4.784 7.63121V7.63636H23V8H3.864C1.79166 8 0.100536 6.38793 0.00449219 4.36364H0V0H1.656V4.36364Z" fill="currentColor"/>
+              <svg class="svg-icon h-full w-auto inline-block" height="8" viewBox="0 0 5 8" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M1.656 4.36364C1.656 6.1101 3.04042 7.53687 4.784 7.63121V8H3.864C1.79166 8 0.100536 6.38793 0.00449219 4.36364H0V0H1.656V4.36364Z" fill="currentColor"/>
 </svg>
             </div>
-            <div class="flex flex-col border-b-[3px] border-current pb-0.5 pr-3 -ml-0.5">
+            <div class="flex flex-col border-b-[3px] border-current pb-0.5 pr-1.5 -ml-0.5">
               <span id="txtCountdown" class="tracking-tight text-2xl sm:text-4xl md:text-5xl leading-none">6MIN</span>
             </div>
           </div>
@@ -223,10 +223,11 @@
         </div>
         <div id="calSubcontrols" class="space-y-2.5 transition-opacity">
           <div class="grid grid-cols-2 gap-1.5">
-            <button onclick="setEventMinutes(300)" class="p-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-400 font-bold text-center text-xs">5 Hours (5)</button>
+            <button onclick="setEventMinutes(0)" class="p-1.5 rounded-lg border border-purple-500/40 bg-purple-500/10 text-purple-400 font-bold text-center text-xs">HAPPENING (NOW)</button>
             <button onclick="setEventMinutes(38)" class="p-1.5 rounded-lg border border-red-500/40 bg-red-500/10 text-red-400 font-bold text-center text-xs">38MIN (3 5 3)</button>
+            <button onclick="setEventMinutes(300)" class="p-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-400 font-bold text-center text-xs">5 Hours (5)</button>
             <button onclick="setEventMinutes(-2)" class="p-1.5 rounded-lg border border-sky-500/40 bg-sky-500/10 text-sky-400 font-bold text-center text-xs">All Day (Today)</button>
-            <button onclick="setEventMinutes(-1)" class="p-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-emerald-400 font-bold text-center text-xs">Open Day</button>
+            <button onclick="setEventMinutes(-1)" class="p-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 text-emerald-400 font-bold text-center text-xs col-span-2">Open Day</button>
           </div>
           <div class="pt-1">
             <label class="text-[10px] text-[var(--muted-foreground)] block mb-1">DYNAMIC TIMEZONE ABBREVIATION:</label>
@@ -372,7 +373,7 @@
 
     function getHandsHtml(minutes) {
       if (minutes < 0) return handMarkers[2]; // Peace sign for open day
-      if (minutes === 0) return handMarkers[1];
+      if (minutes === 0) return ''; // No finger icon when event is currently happening
 
       if (minutes >= 60) {
         const hours = Math.max(1, Math.round(minutes / 60));
@@ -446,8 +447,8 @@
       } else if (t === 'floating') {
         c.className = 'w-full bg-slate-700/80 rounded-2xl p-6 sm:p-10 shadow-none relative select-none overflow-hidden transition-all duration-300';
         w.style.display = 'none';
-        content.className = 'w-full flex flex-col space-y-3.5 sm:space-y-5 text-white font-bold tracking-wider pt-2 drop-shadow-md';
-        tzTxt.style.color = '#334155';
+        content.className = 'w-full flex flex-col space-y-3.5 sm:space-y-5 text-[#D6E6F0] font-bold tracking-wider pt-2 drop-shadow-md';
+        tzTxt.style.color = '#17181A';
       }
       content.style.fontWeight = currentWeight;
     }
@@ -496,8 +497,10 @@
     function setEventMinutes(minutes) {
       if (minutes >= 0) {
         document.getElementById('txtEvent').innerText = currentEventTitle || 'WEEKLY DESIGN SYNC';
-        document.getElementById('txtStatus').innerText = 'STARTING';
-        if (minutes >= 60) {
+        document.getElementById('txtStatus').innerText = minutes === 0 ? 'HAPPENING' : 'STARTING';
+        if (minutes === 0) {
+          document.getElementById('txtCountdown').innerText = 'NOW';
+        } else if (minutes >= 60) {
           const hours = Math.max(1, Math.round(minutes / 60));
           document.getElementById('txtCountdown').innerText = hours <= 1 ? '1 HOUR' : `${hours} HOURS`;
         } else {
@@ -623,6 +626,9 @@
         }
       });
     }
+
+    // Default preview state to NOW
+    setEventMinutes(0);
   </script>
 </body>
 </html>

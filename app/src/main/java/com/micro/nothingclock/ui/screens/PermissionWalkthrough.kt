@@ -35,6 +35,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
@@ -91,7 +92,9 @@ fun PermissionWalkthrough(
     onGrantExactAlarm: () -> Unit,
     onPinWidget: () -> Unit,
     onDismiss: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isBatteryOptIgnored: Boolean = true,
+    onGrantBatteryOpt: () -> Unit = {}
 ) {
     var currentStep by remember { mutableIntStateOf(0) }
 
@@ -156,7 +159,9 @@ fun PermissionWalkthrough(
                             when (step) {
                                 0 -> ExactAlarmsStep(
                                     canExactAlarm = canExactAlarm,
-                                    onGrantExactAlarm = onGrantExactAlarm
+                                    onGrantExactAlarm = onGrantExactAlarm,
+                                    isBatteryOptIgnored = isBatteryOptIgnored,
+                                    onGrantBatteryOpt = onGrantBatteryOpt
                                 )
                                 1 -> CalendarStep(
                                     hasCalPerm = hasCalPerm,
@@ -170,6 +175,7 @@ fun PermissionWalkthrough(
                                     canExactAlarm = canExactAlarm,
                                     hasCalPerm = hasCalPerm,
                                     hasLocPerm = hasLocPerm,
+                                    isBatteryOptIgnored = isBatteryOptIgnored,
                                     onPinWidget = onPinWidget,
                                     onFinish = onDismiss
                                 )
@@ -315,11 +321,13 @@ private fun WalkthroughProgressIndicators(
 @Composable
 private fun ExactAlarmsStep(
     canExactAlarm: Boolean,
-    onGrantExactAlarm: () -> Unit
+    onGrantExactAlarm: () -> Unit,
+    isBatteryOptIgnored: Boolean = true,
+    onGrantBatteryOpt: () -> Unit = {}
 ) {
     StepHeroBadge(
         icon = Icons.Default.Timer,
-        isGranted = canExactAlarm,
+        isGranted = canExactAlarm && isBatteryOptIgnored,
         tag = "ESSENTIAL // ZERO-LAG TIMING"
     )
 
@@ -334,7 +342,7 @@ private fun ExactAlarmsStep(
     )
 
     Text(
-        text = "Android battery savers put apps to sleep. Grant exact alarm access to ensure the MicroNothing clock flips at the exact 00-second mark on your home screen without freezing or lagging.",
+        text = "Android battery savers put apps to sleep. Grant exact alarm access and disable battery optimization to ensure the MicroNothing clock flips at the exact 00-second mark on your home screen without freezing or lagging.",
         fontFamily = GeistMonoFamily,
         fontSize = 12.sp,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -411,6 +419,67 @@ private fun ExactAlarmsStep(
                         fontSize = 12.sp,
                         letterSpacing = 0.5.sp
                     )
+                }
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "UNRESTRICTED BATTERY",
+                            fontFamily = GeistMonoFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Prevents OS from sleeping/freezing clock ticks",
+                            fontFamily = GeistMonoFamily,
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    StatusBadge(isGranted = isBatteryOptIgnored)
+                }
+
+                if (isBatteryOptIgnored) {
+                    ConfirmedStateBanner(
+                        title = "BATTERY RESTRICTION OFF",
+                        description = "Widget process will not be killed by OEM battery savers."
+                    )
+                } else {
+                    ActionPromptBanner(
+                        title = "RECOMMENDED FOR NOTHING OS",
+                        description = "Tap below to allow MicroNothing to run unrestricted in the background so the clock never pauses."
+                    )
+
+                    Button(
+                        onClick = onGrantBatteryOpt,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        contentPadding = PaddingValues(vertical = 12.dp)
+                    ) {
+                        Icon(Icons.Default.BatteryChargingFull, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "SET BATTERY TO UNRESTRICTED",
+                            fontFamily = GeistMonoFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            letterSpacing = 0.5.sp
+                        )
+                    }
                 }
             }
         }
@@ -653,10 +722,11 @@ private fun AllSetAndPinStep(
     canExactAlarm: Boolean,
     hasCalPerm: Boolean,
     hasLocPerm: Boolean,
+    isBatteryOptIgnored: Boolean = true,
     onPinWidget: () -> Unit,
     onFinish: () -> Unit
 ) {
-    val allConfigured = canExactAlarm && hasCalPerm && hasLocPerm
+    val allConfigured = canExactAlarm && hasCalPerm && hasLocPerm && isBatteryOptIgnored
 
     StepHeroBadge(
         icon = if (allConfigured) Icons.Default.CheckCircle else Icons.Default.Widgets,
@@ -712,6 +782,18 @@ private fun AllSetAndPinStep(
                 grantedDesc = "Zero-second synchronization active",
                 missingDesc = "Standard fallback ticks (may lag)"
             )
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                SummaryItemRow(
+                    icon = Icons.Default.BatteryChargingFull,
+                    title = "Unrestricted Battery Mode",
+                    isGranted = isBatteryOptIgnored,
+                    grantedDesc = "Background ticks will not be killed",
+                    missingDesc = "Standard mode (may pause under Doze)"
+                )
+            }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 

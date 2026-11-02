@@ -1,7 +1,10 @@
 package com.micro.nothingclock.ui.screens
 
 import android.Manifest
+import android.app.Activity
 import android.app.AlarmManager
+import android.app.WallpaperColors
+import android.app.WallpaperManager
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
@@ -11,6 +14,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.ManagedActivityResultLauncher
@@ -113,6 +117,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -125,6 +130,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.micro.nothingclock.data.AppThemeMode
 import com.micro.nothingclock.data.CalendarRepository
 import com.micro.nothingclock.data.ClockThemePreset
+import com.micro.nothingclock.data.TasksRepository
 import com.micro.nothingclock.data.UpcomingCalendarEvent
 import com.micro.nothingclock.data.WeatherInfo
 import com.micro.nothingclock.data.WeatherRepository
@@ -169,6 +175,31 @@ fun ClockPreviewScreen(
                     context.startActivity(fallbackIntent)
                 } catch (_: Exception) {
                     Toast.makeText(context, "Please enable exact alarms in system settings", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    val onGrantBatteryOpt: () -> Unit = {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            try {
+                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                }
+                context.startActivity(intent)
+            } catch (_: Exception) {
+                try {
+                    val fallbackIntent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                    context.startActivity(fallbackIntent)
+                } catch (_: Exception) {
+                    try {
+                        val appSettings = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = Uri.fromParts("package", context.packageName, null)
+                        }
+                        context.startActivity(appSettings)
+                    } catch (_: Exception) {
+                        Toast.makeText(context, "Please set battery to Unrestricted in system settings", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         }
@@ -221,6 +252,15 @@ fun ClockPreviewScreen(
         )
     }
 
+    var isBatteryOptIgnored by remember {
+        mutableStateOf(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: true
+            } else true
+        )
+    }
+
     // Real-time Lifecycle observer: automatically refreshes permission statuses when returning from system settings
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -251,7 +291,14 @@ fun ClockPreviewScreen(
                 val wasAlarmGranted = canExactAlarm
                 canExactAlarm = alarmGranted
 
-                if (alarmGranted && !wasAlarmGranted) {
+                val batteryIgnored = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+                    powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: true
+                } else true
+                val wasBatteryIgnored = isBatteryOptIgnored
+                isBatteryOptIgnored = batteryIgnored
+
+                if ((alarmGranted && !wasAlarmGranted) || (batteryIgnored && !wasBatteryIgnored)) {
                     NothingClockWidgetProvider.scheduleNextMinuteAlarm(context)
                     sendWidgetRefresh(context)
                 }
@@ -308,11 +355,80 @@ fun ClockPreviewScreen(
     }
 
     val calendarRepo = remember { CalendarRepository(context) }
-    val event = remember(currentTimeMillis, config.showCalendar, config.useLiveCalendar, hasCalPerm, config.fallbackEventTitle, config.fallbackMinutes) {
+    val tasksRepo = remember { TasksRepository(context) }
+    var isTasksConnected by remember { mutableStateOf(tasksRepo.isConnected()) }
+    var connectedTasksEmail by remember { mutableStateOf(tasksRepo.getConnectedAccountEmail()) }
+    var isTasksSyncing by remember { mutableStateOf(false) }
+
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val res = tasksRepo.handleSignInResult(result.data)
+        if (res.isSuccess) {
+            isTasksConnected = true
+            connectedTasksEmail = tasksRepo.getConnectedAccountEmail()
+            updateConfig(config.copy(includeGoogleTasks = true))
+            Toast.makeText(context, "Google Tasks connected!", Toast.LENGTH_SHORT).show()
+            coroutineScope.launch {
+                isTasksSyncing = true
+                val syncRes = tasksRepo.syncTasks()
+                isTasksSyncing = false
+                if (syncRes.isSuccess) {
+                    val count = syncRes.getOrNull()?.size ?: 0
+                    Toast.makeText(context, "Synced $count tasks", Toast.LENGTH_SHORT).show()
+                    sendWidgetRefresh(context)
+                } else {
+                    Toast.makeText(context, "Sync issue: ${syncRes.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        } else {
+            Toast.makeText(context, "Sign-in failed: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    val onConnectTasks: () -> Unit = {
+        val activity = context as? Activity
+        if (activity != null) {
+            val signInIntent = tasksRepo.getGoogleSignInClient(activity).signInIntent
+            googleSignInLauncher.launch(signInIntent)
+        } else {
+            Toast.makeText(context, "Unable to launch sign-in: Activity context unavailable", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val onSyncTasks: () -> Unit = {
+        coroutineScope.launch {
+            isTasksSyncing = true
+            Toast.makeText(context, "Syncing Google Tasks...", Toast.LENGTH_SHORT).show()
+            val syncRes = tasksRepo.syncTasks()
+            isTasksSyncing = false
+            if (syncRes.isSuccess) {
+                val count = syncRes.getOrNull()?.size ?: 0
+                Toast.makeText(context, "Synced $count tasks", Toast.LENGTH_SHORT).show()
+                sendWidgetRefresh(context)
+            } else {
+                Toast.makeText(context, "Sync failed: ${syncRes.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    val onDisconnectTasks: () -> Unit = {
+        val activity = context as? Activity
+        if (activity != null) {
+            tasksRepo.disconnect(activity) {
+                isTasksConnected = false
+                connectedTasksEmail = null
+                Toast.makeText(context, "Google Tasks disconnected", Toast.LENGTH_SHORT).show()
+                sendWidgetRefresh(context)
+            }
+        }
+    }
+
+    val event = remember(currentTimeMillis, config.showCalendar, config.useLiveCalendar, config.includeGoogleTasks, hasCalPerm, isTasksConnected, isTasksSyncing, config.fallbackEventTitle, config.fallbackMinutes) {
         if (!config.showCalendar) {
             UpcomingCalendarEvent("", -1L, hasEvent = false, isAllDay = false)
-        } else if (config.useLiveCalendar && hasCalPerm) {
-            calendarRepo.getNextUpcomingEvent(config.fallbackEventTitle, config.fallbackMinutes)
+        } else if ((config.useLiveCalendar && hasCalPerm) || (config.includeGoogleTasks && isTasksConnected)) {
+            calendarRepo.getNextUpcomingEvent(config.fallbackEventTitle, config.fallbackMinutes, config.includeGoogleTasks)
         } else {
             val isAllDayFallback = config.fallbackMinutes == -2
             UpcomingCalendarEvent(
@@ -372,7 +488,18 @@ fun ClockPreviewScreen(
     val displayTemp = if (config.useLiveWeather && hasLocPerm) liveWeather.temperature else config.tempCelsius
     val displayCond = if (config.useLiveWeather && hasLocPerm) liveWeather.condition else config.weatherCondition
 
-    val previewBitmap = remember(currentTimeMillis, config, event, displayTemp, displayCond, previewHeight) {
+    val systemWallpaperColor = remember(context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            try {
+                val wm = WallpaperManager.getInstance(context)
+                wm?.getWallpaperColors(WallpaperManager.FLAG_SYSTEM)?.primaryColor?.toArgb()
+            } catch (_: Exception) {
+                null
+            }
+        } else null
+    }
+
+    val previewBitmap = remember(currentTimeMillis, config, event, displayTemp, displayCond, previewHeight, systemWallpaperColor) {
         NothingClockRenderer.renderToBitmap(
             context = context,
             width = 1024,
@@ -382,7 +509,11 @@ fun ClockPreviewScreen(
             minutesLeft = event.minutesUntilStart,
             temp = displayTemp,
             condition = displayCond,
-            isAllDay = event.isAllDay
+            isAllDay = event.isAllDay,
+            isTask = event.isTask,
+            previewBgColor = if (config.themePreset == ClockThemePreset.TRANSPARENT_FLOATING) {
+                systemWallpaperColor ?: 0xFF3E4857.toInt()
+            } else null
         )
     }
 
@@ -493,6 +624,12 @@ fun ClockPreviewScreen(
                                 hasCalPerm = hasCalPerm,
                                 calPermLauncher = calPermLauncher,
                                 calendarRepo = calendarRepo,
+                                isTasksConnected = isTasksConnected,
+                                connectedTasksEmail = connectedTasksEmail,
+                                isTasksSyncing = isTasksSyncing,
+                                onConnectTasks = onConnectTasks,
+                                onSyncTasks = onSyncTasks,
+                                onDisconnectTasks = onDisconnectTasks,
                                 onConfigChanged = { updateConfig(it) }
                             )
                             2 -> WeatherTab(
@@ -512,6 +649,8 @@ fun ClockPreviewScreen(
                                 hasLocPerm = hasLocPerm,
                                 locPermLauncher = locPermLauncher,
                                 canExactAlarm = canExactAlarm,
+                                isBatteryOptIgnored = isBatteryOptIgnored,
+                                onGrantBatteryOpt = onGrantBatteryOpt,
                                 onConfigChanged = { updateConfig(it) },
                                 onManualRefresh = onManualRefresh,
                                 onLaunchWalkthrough = { showWalkthrough = true }
@@ -583,6 +722,12 @@ fun ClockPreviewScreen(
                             hasCalPerm = hasCalPerm,
                             calPermLauncher = calPermLauncher,
                             calendarRepo = calendarRepo,
+                            isTasksConnected = isTasksConnected,
+                            connectedTasksEmail = connectedTasksEmail,
+                            isTasksSyncing = isTasksSyncing,
+                            onConnectTasks = onConnectTasks,
+                            onSyncTasks = onSyncTasks,
+                            onDisconnectTasks = onDisconnectTasks,
                             onConfigChanged = { updateConfig(it) }
                         )
                         2 -> WeatherTab(
@@ -602,6 +747,8 @@ fun ClockPreviewScreen(
                             hasLocPerm = hasLocPerm,
                             locPermLauncher = locPermLauncher,
                             canExactAlarm = canExactAlarm,
+                            isBatteryOptIgnored = isBatteryOptIgnored,
+                            onGrantBatteryOpt = onGrantBatteryOpt,
                             onConfigChanged = { updateConfig(it) },
                             onManualRefresh = onManualRefresh,
                             onLaunchWalkthrough = { showWalkthrough = true }
@@ -626,6 +773,8 @@ fun ClockPreviewScreen(
                 onGrantLocPerm = { locPermLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION) },
                 canExactAlarm = canExactAlarm,
                 onGrantExactAlarm = onGrantExactAlarm,
+                isBatteryOptIgnored = isBatteryOptIgnored,
+                onGrantBatteryOpt = onGrantBatteryOpt,
                 onPinWidget = { pinAppWidget(context, config, previewHeight) },
                 onDismiss = {
                     prefs.setWalkthroughCompleted(true)
@@ -836,13 +985,25 @@ private fun LivePreviewCard(
     bitmap: Bitmap,
     previewHeight: Int
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val systemWallpaperColor = remember(context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            try {
+                val wm = WallpaperManager.getInstance(context)
+                wm?.getWallpaperColors(WallpaperManager.FLAG_SYSTEM)?.primaryColor?.toArgb()
+            } catch (_: Exception) {
+                null
+            }
+        } else null
+    }
+
     val wallpaperBg = when (config.themePreset) {
         ClockThemePreset.OS5_BLUEPRINT -> Color(0xFF8B9FB0)
         ClockThemePreset.MATERIAL_YOU -> MaterialTheme.colorScheme.surfaceContainerHighest
         ClockThemePreset.FROSTED_GLASS -> Color(0xFF2C3545)
         ClockThemePreset.AMOLED_DARK -> Color(0xFF0A0A0C)
         ClockThemePreset.NOTHING_RED -> Color(0xFF1B0709)
-        ClockThemePreset.TRANSPARENT_FLOATING -> Color(0xFF3E4857)
+        ClockThemePreset.TRANSPARENT_FLOATING -> systemWallpaperColor?.let { Color(it) } ?: Color(0xFF3E4857)
     }
 
     Card(
@@ -1429,6 +1590,12 @@ private fun CalendarTab(
     hasCalPerm: Boolean,
     calPermLauncher: ManagedActivityResultLauncher<String, Boolean>,
     calendarRepo: CalendarRepository,
+    isTasksConnected: Boolean,
+    connectedTasksEmail: String?,
+    isTasksSyncing: Boolean,
+    onConnectTasks: () -> Unit,
+    onSyncTasks: () -> Unit,
+    onDisconnectTasks: () -> Unit,
     onConfigChanged: (WidgetConfig) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -1572,6 +1739,112 @@ private fun CalendarTab(
                 }
             }
 
+            // Google Tasks Integration Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 8.dp)
+                        ) {
+                            Text(
+                                text = "Google Tasks Integration",
+                                fontFamily = GeistMonoFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = if (isTasksConnected) "Connected: ${connectedTasksEmail ?: "Google Account"}" else "Sync your to-dos with agenda",
+                                fontFamily = GeistMonoFamily,
+                                fontSize = 10.sp,
+                                color = if (isTasksConnected) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        if (isTasksConnected) {
+                            Switch(
+                                checked = config.includeGoogleTasks,
+                                onCheckedChange = { onConfigChanged(config.copy(includeGoogleTasks = it)) }
+                            )
+                        }
+                    }
+
+                    if (isTasksConnected) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            FilledTonalButton(
+                                onClick = onSyncTasks,
+                                enabled = !isTasksSyncing,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Text(
+                                        text = if (isTasksSyncing) "SYNCING..." else "SYNC NOW",
+                                        fontFamily = GeistMonoFamily,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+
+                            OutlinedButton(
+                                onClick = onDisconnectTasks,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    text = "DISCONNECT",
+                                    fontFamily = GeistMonoFamily,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    } else {
+                        Button(
+                            onClick = onConnectTasks,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            )
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Text(
+                                    text = "CONNECT GOOGLE TASKS",
+                                    fontFamily = GeistMonoFamily,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // Manual Event & Hand Gesture Simulator Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1658,6 +1931,13 @@ private fun CalendarTab(
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         OutlinedButton(
+                            onClick = { onConfigChanged(config.copy(fallbackEventTitle = "WEEKLY DESIGN SYNC", fallbackMinutes = 0)) },
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("HAPPENING (NOW)", fontSize = 10.sp, fontFamily = GeistMonoFamily)
+                        }
+
+                        OutlinedButton(
                             onClick = { onConfigChanged(config.copy(fallbackEventTitle = "WEEKLY DESIGN SYNC", fallbackMinutes = 38)) },
                             shape = RoundedCornerShape(10.dp)
                         ) {
@@ -1712,6 +1992,7 @@ private fun WeatherTab(
     onRefreshWeather: () -> Unit,
     onConfigChanged: (WidgetConfig) -> Unit
 ) {
+    val context = LocalContext.current
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         // Master Live Weather Toggle Card
         Card(
@@ -1862,6 +2143,63 @@ private fun WeatherTab(
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // Google Weather Integration Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.WbSunny,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "GOOGLE WEATHER FORECAST",
+                            fontFamily = GeistMonoFamily,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Tap weather line on homescreen widget to open full forecast",
+                            fontFamily = GeistMonoFamily,
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = {
+                        val weatherIntent = WeatherRepository.createGoogleWeatherIntent(context)
+                        context.startActivity(weatherIntent)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = "OPEN FULL WEATHER FORECAST",
+                        fontFamily = GeistMonoFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
+                    )
                 }
             }
         }
@@ -2075,6 +2413,8 @@ private fun SystemAndThemeTab(
     hasLocPerm: Boolean,
     locPermLauncher: ManagedActivityResultLauncher<String, Boolean>,
     canExactAlarm: Boolean,
+    isBatteryOptIgnored: Boolean = true,
+    onGrantBatteryOpt: () -> Unit = {},
     onConfigChanged: (WidgetConfig) -> Unit,
     onManualRefresh: () -> Unit,
     onLaunchWalkthrough: () -> Unit
@@ -2279,6 +2619,15 @@ private fun SystemAndThemeTab(
                     isGranted = hasLocPerm,
                     onGrantClick = { locPermLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION) }
                 )
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    PermissionStatusRow(
+                        title = "Unrestricted Battery Mode",
+                        desc = "Prevents OS from sleeping/freezing clock ticks",
+                        isGranted = isBatteryOptIgnored,
+                        onGrantClick = onGrantBatteryOpt
+                    )
+                }
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     PermissionStatusRow(

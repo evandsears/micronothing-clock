@@ -13,7 +13,8 @@ class WidgetAlarmReceiver : BroadcastReceiver() {
         val appWidgetIds = appWidgetManager.getAppWidgetIds(thisWidget)
 
         if (appWidgetIds.isNotEmpty()) {
-            NothingClockWidgetProvider.updateAllWidgets(context, appWidgetManager, appWidgetIds)
+            val pendingResult = goAsync()
+            NothingClockWidgetProvider.updateAllWidgets(context, appWidgetManager, appWidgetIds, pendingResult)
             NothingClockWidgetProvider.scheduleNextMinuteAlarm(context)
         }
     }

@@ -13,22 +13,54 @@
         android:scaleType="fitXY"
         android:contentDescription="@string/widget_description" />
 
-    <!-- Hotspot overlay for interaction -->
+    <!-- Hotspot overlay for interaction when calendar is visible (4-row mode) -->
     <LinearLayout
+        android:id="@+id/hotspot_container_calendar"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:orientation="vertical">
 
-        <!-- Top Half: Clock & Weather click zone -->
+        <!-- Row 1: Clock click zone (Date, Time, Timezone) -->
         <FrameLayout
             android:id="@+id/hotspot_clock"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1" />
 
-        <!-- Bottom Half: Calendar click zone -->
+        <!-- Row 2: Weather click zone (Temp, Condition, Forecast) -->
+        <FrameLayout
+            android:id="@+id/hotspot_weather"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!-- Rows 3 & 4: Calendar click zone (Event Title & Countdown) -->
         <FrameLayout
             android:id="@+id/hotspot_calendar"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="2" />
+
+    </LinearLayout>
+
+    <!-- Hotspot overlay for interaction when calendar is hidden (2-row mode) -->
+    <LinearLayout
+        android:id="@+id/hotspot_container_no_calendar"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <!-- Row 1: Clock click zone (50%) -->
+        <FrameLayout
+            android:id="@+id/hotspot_clock_no_cal"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <!-- Row 2: Weather click zone (50%) -->
+        <FrameLayout
+            android:id="@+id/hotspot_weather_no_cal"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1" />

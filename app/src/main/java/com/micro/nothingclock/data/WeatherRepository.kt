@@ -2,9 +2,11 @@ package com.micro.nothingclock.data
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
+import android.net.Uri
 import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
@@ -33,6 +35,69 @@ class WeatherRepository(private val context: Context? = null) {
         private const val TAG = "NothingWeatherRepo"
         private const val DEFAULT_LAT = 40.7128
         private const val DEFAULT_LON = -74.0060
+
+        /**
+         * Resolves and returns an Intent that opens Google Weather for full weather forecasts.
+         * Resolves through:
+         * 1. Standalone Pixel Weather app (com.google.android.apps.weather)
+         * 2. Google App exported Weather activity (WeatherExportedActivity)
+         * 3. Google App Velour dynamic activity trampoline (dynact://velour/weather/ProxyActivity)
+         * 4. Google Search weather query in Google App
+         * 5. Universal Google Weather web search (https://www.google.com/search?q=weather)
+         */
+        fun createGoogleWeatherIntent(context: Context): Intent {
+            val pm = context.packageManager
+
+            // 1. Standalone Pixel Weather app (Android 14+ / Pixel devices)
+            try {
+                val pixelWeatherIntent = pm.getLaunchIntentForPackage("com.google.android.apps.weather")
+                if (pixelWeatherIntent != null) {
+                    pixelWeatherIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    return pixelWeatherIntent
+                }
+            } catch (_: Exception) {}
+
+            // 2. Google App exported Weather activity (Standard Material You Google Weather)
+            try {
+                val googleWeatherIntent = Intent(Intent.ACTION_VIEW).apply {
+                    setClassName(
+                        "com.google.android.googlequicksearchbox",
+                        "com.google.android.apps.search.weather.WeatherExportedActivity"
+                    )
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                }
+                if (googleWeatherIntent.resolveActivity(pm) != null) {
+                    return googleWeatherIntent
+                }
+            } catch (_: Exception) {}
+
+            // 3. Google App Velour dynamic activity trampoline (Legacy Google App weather)
+            try {
+                val velourIntent = Intent(Intent.ACTION_VIEW, Uri.parse("dynact://velour/weather/ProxyActivity")).apply {
+                    setPackage("com.google.android.googlequicksearchbox")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                }
+                if (velourIntent.resolveActivity(pm) != null) {
+                    return velourIntent
+                }
+            } catch (_: Exception) {}
+
+            // 4. Google App search intent for "weather"
+            try {
+                val googleSearchIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=weather")).apply {
+                    setPackage("com.google.android.googlequicksearchbox")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                if (googleSearchIntent.resolveActivity(pm) != null) {
+                    return googleSearchIntent
+                }
+            } catch (_: Exception) {}
+
+            // 5. Universal web search for weather (opens browser)
+            return Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=weather")).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        }
     }
 
     @SuppressLint("MissingPermission")

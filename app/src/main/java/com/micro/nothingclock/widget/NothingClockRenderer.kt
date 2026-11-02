@@ -1,7 +1,10 @@
 package com.micro.nothingclock.widget
 
 import android.annotation.SuppressLint
+import android.app.WallpaperColors
+import android.app.WallpaperManager
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapShader
 import android.graphics.Canvas
@@ -139,7 +142,7 @@ object NothingClockRenderer {
     fun calculateHandGestures(minutes: Long, isAllDay: Boolean = false): String {
         if (isAllDay) return "✌️ (All Day)"
         if (minutes < 0) return "✌️ (Open Day)"
-        if (minutes == 0L) return "👌 (Starting Now)"
+        if (minutes == 0L) return "HAPPENING (NOW)"
         val drawables = getHandMarkerDrawables(minutes, isAllDay)
         val emojis = drawables.joinToString(" ") { resId ->
             when (resId) {
@@ -255,10 +258,11 @@ object NothingClockRenderer {
         }
     }
 
-    fun getHandMarkerDrawables(minutes: Long, isAllDay: Boolean = false): List<Int> {
+    fun getHandMarkerDrawables(minutes: Long, isAllDay: Boolean = false, isTask: Boolean = false): List<Int> {
+        if (isTask) return listOf(R.drawable.ic_nothing_marker_1)
         if (isAllDay) return listOf(R.drawable.ic_nothing_marker_2)
         if (minutes < 0) return listOf(R.drawable.ic_nothing_marker_2) // Peace sign for open day!
-        if (minutes == 0L) return listOf(R.drawable.ic_nothing_marker_1)
+        if (minutes == 0L) return emptyList() // No finger countdown icon when event is currently happening
 
         if (minutes >= 60) {
             val hours = ((minutes + 30) / 60).coerceAtLeast(1)
@@ -315,6 +319,42 @@ object NothingClockRenderer {
             3 -> R.drawable.ic_nothing_marker_3
             4 -> R.drawable.ic_nothing_marker_4
             else -> R.drawable.ic_nothing_marker_5
+        }
+    }
+
+    fun formatTimezoneAbbreviation(tz: TimeZone = TimeZone.getDefault(), date: Date = Date()): String {
+        val isDst = tz.inDaylightTime(date)
+        val raw = tz.getDisplayName(isDst, TimeZone.SHORT, Locale.US).uppercase(Locale.US)
+
+        val isOffsetFormat = raw.startsWith("GMT+") || raw.startsWith("GMT-") ||
+                raw.startsWith("UTC+") || raw.startsWith("UTC-") ||
+                (raw.length > 4 && (raw.contains('+') || raw.contains('-')))
+
+        if (!isOffsetFormat && raw.length <= 4) {
+            return raw
+        }
+
+        if (raw == "GMT" || raw == "UTC") {
+            return raw
+        }
+
+        // Shorthand for long timezones/offsets: Sign + 2 digits (e.g. "+01", "-05") or "GMT"
+        val offsetMillis = tz.getOffset(date.time)
+        val totalMinutes = offsetMillis / (60 * 1000)
+        val hours = totalMinutes / 60
+        val mins = Math.abs(totalMinutes % 60)
+
+        if (hours == 0 && mins == 0) {
+            return "GMT"
+        }
+
+        val sign = if (hours >= 0) '+' else '-'
+        val absHours = Math.abs(hours)
+
+        return if (mins == 0) {
+            String.format(Locale.US, "%c%02d", sign, absHours)
+        } else {
+            String.format(Locale.US, "%c%d.%d", sign, absHours, mins / 6)
         }
     }
 
@@ -500,6 +540,238 @@ object NothingClockRenderer {
         canvas.drawRoundRect(innerRect, innerCornerRadius, innerCornerRadius, innerPaint)
     }
 
+    data class FloatingColors(
+        val textColor: Int,
+        val pillBgColor: Int,
+        val pillTextColor: Int
+    )
+
+    fun rgbToHsv(r: Int, g: Int, b: Int, hsv: FloatArray) {
+        val rf = r / 255.0f
+        val gf = g / 255.0f
+        val bf = b / 255.0f
+        val max = maxOf(rf, maxOf(gf, bf))
+        val min = minOf(rf, minOf(gf, bf))
+        val delta = max - min
+
+        var h = 0f
+        if (delta > 0.00001f) {
+            h = when (max) {
+                rf -> (60f * ((gf - bf) / delta) + 360f) % 360f
+                gf -> (60f * ((bf - rf) / delta) + 120f) % 360f
+                else -> (60f * ((rf - gf) / delta) + 240f) % 360f
+            }
+        }
+
+        val s = if (max > 0.00001f) delta / max else 0f
+        val v = max
+
+        hsv[0] = h
+        hsv[1] = s
+        hsv[2] = v
+    }
+
+    fun hsvToRgb(h: Float, s: Float, v: Float): Int {
+        val c = v * s
+        val hPrime = (((h % 360f) + 360f) % 360f) / 60f
+        val x = c * (1f - Math.abs((hPrime % 2f) - 1f))
+        val m = v - c
+
+        val (r1, g1, b1) = when {
+            hPrime < 1f -> Triple(c, x, 0f)
+            hPrime < 2f -> Triple(x, c, 0f)
+            hPrime < 3f -> Triple(0f, c, x)
+            hPrime < 4f -> Triple(0f, x, c)
+            hPrime < 5f -> Triple(x, 0f, c)
+            else -> Triple(c, 0f, x)
+        }
+
+        val r = Math.round((r1 + m) * 255f).coerceIn(0, 255)
+        val g = Math.round((g1 + m) * 255f).coerceIn(0, 255)
+        val b = Math.round((b1 + m) * 255f).coerceIn(0, 255)
+
+        return (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+    }
+
+    fun calculatePerceivedLuminance(color: Int): Double {
+        val r = ((color ushr 16) and 0xFF) / 255.0
+        val g = ((color ushr 8) and 0xFF) / 255.0
+        val b = (color and 0xFF) / 255.0
+        return r * 0.299 + g * 0.587 + b * 0.114
+    }
+
+    fun calculateWcagLuminance(color: Int): Double {
+        fun toLinear(channel: Int): Double {
+            val c = channel / 255.0
+            return if (c <= 0.04045) c / 12.92 else Math.pow((c + 0.055) / 1.055, 2.4)
+        }
+        val r = (color ushr 16) and 0xFF
+        val g = (color ushr 8) and 0xFF
+        val b = color and 0xFF
+        return 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b)
+    }
+
+    fun calculateContrastRatio(color1: Int, color2: Int): Double {
+        val l1 = calculateWcagLuminance(color1)
+        val l2 = calculateWcagLuminance(color2)
+        val lighter = Math.max(l1, l2)
+        val darker = Math.min(l1, l2)
+        return (lighter + 0.05) / (darker + 0.05)
+    }
+
+    /**
+     * Resolves dynamic, wallpaper-harmonized typography colors for the Floating Glyph preset.
+     * Emulates Nothing OS 5.0 micrographics styling: subtly tinted off-white on dark backgrounds
+     * (e.g. ice-blue #D0E6F2 on slate blue wallpaper) or tinted obsidian on light backgrounds,
+     * while strictly enforcing legibility (preventing garish neon text or low-contrast combinations).
+     */
+    fun resolveFloatingColors(
+        context: Context?,
+        previewBgColor: Int? = null
+    ): FloatingColors {
+        var isDarkWallpaper = true
+        var detectedBgColor: Int? = previewBgColor
+
+        if (previewBgColor != null) {
+            val lum = calculatePerceivedLuminance(previewBgColor)
+            isDarkWallpaper = lum < 0.60
+        } else if (context != null) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                try {
+                    val wm = WallpaperManager.getInstance(context)
+                    val wpColors = wm?.getWallpaperColors(WallpaperManager.FLAG_SYSTEM)
+                    if (wpColors != null) {
+                        val supportsDarkText = (wpColors.colorHints and WallpaperColors.HINT_SUPPORTS_DARK_TEXT) != 0
+                        if (supportsDarkText) {
+                            isDarkWallpaper = false
+                        } else {
+                            val prim = wpColors.primaryColor?.toArgb()
+                            if (prim != null) {
+                                detectedBgColor = prim
+                                isDarkWallpaper = calculatePerceivedLuminance(prim) < 0.60
+                            }
+                        }
+                    } else {
+                        val uiMode = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+                        isDarkWallpaper = uiMode != Configuration.UI_MODE_NIGHT_NO
+                    }
+                } catch (_: Exception) {
+                    val uiMode = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+                    isDarkWallpaper = uiMode != Configuration.UI_MODE_NIGHT_NO
+                }
+            } else {
+                val uiMode = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+                isDarkWallpaper = uiMode != Configuration.UI_MODE_NIGHT_NO
+            }
+        }
+
+        // Determine base tone
+        val baseColor = detectedBgColor ?: ((0xFF shl 24) or (62 shl 16) or (72 shl 8) or 87) // Default Nothing OS slate blue #3E4857
+        val baseR = (baseColor ushr 16) and 0xFF
+        val baseG = (baseColor ushr 8) and 0xFF
+        val baseB = baseColor and 0xFF
+        val hsv = FloatArray(3)
+        rgbToHsv(baseR, baseG, baseB, hsv)
+        val hue = hsv[0]
+        val bgSat = hsv[1]
+
+        // On Android 12+ (API 31+), if context is available and no previewBgColor override, try system dynamic color
+        var resolvedTextColor: Int? = null
+        if (previewBgColor == null && context != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
+                val systemTokenRes = if (isDarkWallpaper) {
+                    android.R.color.system_accent1_100
+                } else {
+                    android.R.color.system_accent1_900
+                }
+                val tokenColor = ContextCompat.getColor(context, systemTokenRes)
+                val tokenHsv = FloatArray(3)
+                val tR = (tokenColor ushr 16) and 0xFF
+                val tG = (tokenColor ushr 8) and 0xFF
+                val tB = tokenColor and 0xFF
+                rgbToHsv(tR, tG, tB, tokenHsv)
+
+                // Sanitize token: strictly clamp saturation to a subtle pastel tint (0.06 - 0.16)
+                // and lock lightness for maximum readability without neon bleeding.
+                val safeSat = tokenHsv[1].coerceIn(0.06f, 0.16f)
+                val safeVal = if (isDarkWallpaper) tokenHsv[2].coerceIn(0.92f, 0.96f) else tokenHsv[2].coerceIn(0.09f, 0.13f)
+                resolvedTextColor = hsvToRgb(tokenHsv[0], safeSat, safeVal)
+            } catch (_: Exception) {}
+        }
+
+        if (resolvedTextColor == null) {
+            // Algorithmic extraction from background color
+            // Strictly clamp saturation between 8% and 15% to guarantee a subtle, sophisticated tint (never neon!)
+            val textSat = (bgSat * 0.35f).coerceIn(if (bgSat > 0.05f) 0.08f else 0f, 0.15f)
+            val textVal = if (isDarkWallpaper) 0.94f else 0.11f
+            resolvedTextColor = hsvToRgb(hue, textSat, textVal)
+        }
+
+        // Ensure WCAG AA contrast against background if detected
+        var finalTextColor = resolvedTextColor
+        if (detectedBgColor != null) {
+            var contrast = calculateContrastRatio(finalTextColor, detectedBgColor)
+            if (contrast < 4.5) {
+                val adjustHsv = FloatArray(3)
+                val fR = (finalTextColor ushr 16) and 0xFF
+                val fG = (finalTextColor ushr 8) and 0xFF
+                val fB = finalTextColor and 0xFF
+                rgbToHsv(fR, fG, fB, adjustHsv)
+                var currentVal = adjustHsv[2]
+                var currentSat = adjustHsv[1]
+                var step = 0
+                while (contrast < 4.5 && step < 10) {
+                    if (isDarkWallpaper) {
+                        currentVal = (currentVal + 0.02f).coerceAtMost(1.0f)
+                        currentSat = (currentSat - 0.01f).coerceAtLeast(0.06f)
+                    } else {
+                        currentVal = (currentVal - 0.02f).coerceAtLeast(0.0f)
+                        currentSat = (currentSat - 0.01f).coerceAtLeast(0.06f)
+                    }
+                    finalTextColor = hsvToRgb(hue, currentSat, currentVal)
+                    contrast = calculateContrastRatio(finalTextColor, detectedBgColor)
+                    step++
+                }
+            }
+        }
+
+        // Coordinate solid pill background and pill text for authentic Nothing OS styling
+        val pillBgColor = finalTextColor
+        val pillTextColor = if (isDarkWallpaper) {
+            // Deep, rich cohesive tone harmonized with wallpaper hue - avoids pure black
+            val hasChroma = bgSat > 0.05f
+            val sat = if (hasChroma) (maxOf(bgSat * 1.5f, 0.45f)).coerceIn(0.35f, 0.60f) else 0.0f
+            var valLevel = 0.23f
+            var color = hsvToRgb(hue, sat, valLevel)
+            var contrast = calculateContrastRatio(color, pillBgColor)
+            while (contrast < 7.0 && valLevel > 0.12f) {
+                valLevel -= 0.02f
+                color = hsvToRgb(hue, sat, valLevel)
+                contrast = calculateContrastRatio(color, pillBgColor)
+            }
+            color
+        } else {
+            // Soft, luminous cohesive tint harmonized with wallpaper hue - avoids pure white
+            val hasChroma = bgSat > 0.05f
+            val sat = if (hasChroma) (bgSat * 0.6f).coerceIn(0.16f, 0.28f) else 0.0f
+            var valLevel = 0.92f
+            var color = hsvToRgb(hue, sat, valLevel)
+            var contrast = calculateContrastRatio(color, pillBgColor)
+            while (contrast < 7.0 && valLevel < 0.98f) {
+                valLevel += 0.02f
+                color = hsvToRgb(hue, sat, valLevel)
+                contrast = calculateContrastRatio(color, pillBgColor)
+            }
+            color
+        }
+
+        return FloatingColors(
+            textColor = finalTextColor,
+            pillBgColor = pillBgColor,
+            pillTextColor = pillTextColor
+        )
+    }
+
     fun renderToBitmap(
         context: Context?,
         width: Int,
@@ -509,7 +781,9 @@ object NothingClockRenderer {
         minutesLeft: Long = 6,
         temp: Int = 27,
         condition: String = "SUNNY",
-        isAllDay: Boolean = false
+        isAllDay: Boolean = false,
+        isTask: Boolean = false,
+        previewBgColor: Int? = null
     ): Bitmap {
         val safeW = if (width > 0) width else 1024
         val safeH = if (height > 0) height else 461
@@ -570,12 +844,13 @@ object NothingClockRenderer {
                 pillTextColor = Color.WHITE
             }
             ClockThemePreset.TRANSPARENT_FLOATING -> {
-                // Floating mode: no card surface
+                // Floating mode: dynamic typography adapting subtly to the background
                 cardBgColor = Color.TRANSPARENT
                 cardBorderColor = Color.TRANSPARENT
-                textColor = Color.WHITE
-                pillBgColor = Color.WHITE
-                pillTextColor = Color.rgb(20, 20, 24)
+                val dynamicColors = resolveFloatingColors(context, previewBgColor)
+                textColor = dynamicColors.textColor
+                pillBgColor = dynamicColors.pillBgColor
+                pillTextColor = dynamicColors.pillTextColor
             }
         }
 
@@ -657,10 +932,9 @@ object NothingClockRenderer {
         val rawTimeStr = timeFormat.format(calendar.time)
         val timeStr = if (!config.is24Hour && rawTimeStr.startsWith("0")) rawTimeStr.substring(1) else rawTimeStr
 
-        // Resolve Dynamic Timezone Abbreviation
+        // Resolve Dynamic Timezone Abbreviation (3-character shorthand for offsets e.g. +01, -05, GMT)
         val tz = TimeZone.getDefault()
-        val isDst = tz.inDaylightTime(Date())
-        val tzAbbr = tz.getDisplayName(isDst, TimeZone.SHORT, Locale.US).uppercase()
+        val tzAbbr = formatTimezoneAbbreviation(tz, calendar.time)
 
         val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             typeface = geistMonoTypeface
@@ -688,8 +962,8 @@ object NothingClockRenderer {
         val monthW = drawAsset(context, canvas, monthRes, cursorX, row1CenterY, targetHeight = badgeHeight, tintColor = textColor)
         cursorX += monthW + safeW * 0.018f
 
-        // 4. Dynamic Timezone Starburst Badge (<EST>, <PST>, <GMT>, etc.)
-        if (tzAbbr == "EST") {
+        // 4. Dynamic Timezone Starburst Badge (<EST>, <CST>, <PST>, <GMT>, etc.)
+        if (tzAbbr == "EST" && config.themePreset != ClockThemePreset.TRANSPARENT_FLOATING) {
             val tzW = drawAsset(context, canvas, R.drawable.ic_nothing_timezone, cursorX, row1CenterY, targetHeight = badgeHeight * 1.05f, tintColor = pillBgColor)
             cursorX += tzW + safeW * 0.024f
         } else {
@@ -781,28 +1055,35 @@ object NothingClockRenderer {
 
             val isEventActive = minutesLeft >= 0
 
-            // 1. Status Label: "STARTING" when meeting upcoming, "ALL DAY" when all-day event, or "ALL CLEAR" when open
+            // 1. Status Label: "HAPPENING" when meeting ongoing now, "TASK" for todo items, "ALL DAY" when all-day event, "STARTING" when meeting upcoming, or "ALL CLEAR" when open
             val statusLabel = when {
+                isTask -> "TASK"
                 isAllDay -> "ALL DAY"
+                isEventActive && minutesLeft == 0L -> "HAPPENING"
                 isEventActive -> "STARTING"
                 else -> "ALL CLEAR"
             }
             canvas.drawText(statusLabel, cursorX, row4CenterY + textBaselineOffset, textPaint)
             cursorX += textPaint.measureText(statusLabel) + safeW * 0.028f
 
-            // 2. Hand Gesture Tally Badges
-            val handDrawables = getHandMarkerDrawables(minutesLeft, isAllDay)
+            // 2. Hand Gesture Tally Badges (removed while event is currently happening)
+            val handDrawables = getHandMarkerDrawables(minutesLeft, isAllDay, isTask)
             for (hRes in handDrawables) {
                 val hW = drawAsset(context, canvas, hRes, cursorX, row4CenterY, targetHeight = badgeHeight * 0.90f, tintColor = pillBgColor)
                 cursorX += hW + safeW * 0.016f
             }
-            cursorX += safeW * 0.018f
+            if (handDrawables.isNotEmpty()) {
+                cursorX += safeW * 0.018f
+            }
 
             // 3. Cradle Bracket Underline & Countdown / Status Text
             val countdownText = when {
+                isTask -> "DUE"
                 isAllDay -> "TODAY"
                 isEventActive -> {
-                    if (minutesLeft >= 60) {
+                    if (minutesLeft == 0L) {
+                        "NOW"
+                    } else if (minutesLeft >= 60) {
                         val hours = ((minutesLeft + 30) / 60).coerceAtLeast(1)
                         if (hours <= 1L) "1 HOUR" else "$hours HOURS"
                     } else {
@@ -813,31 +1094,60 @@ object NothingClockRenderer {
             }
             val minWidth = textPaint.measureText(countdownText)
             val cradleHeight = baseFontSize * 1.05f
-
-            // Draw the authentic L-bracket cradle
-            val cradleCornerW = drawAsset(
-                context,
-                canvas,
-                R.drawable.ic_nothing_cradle,
-                cursorX,
-                row4CenterY + cradleHeight * 0.04f,
-                targetHeight = cradleHeight,
-                tintColor = textColor
-            )
-
-            // Underline line extending under and past the countdown text
-            val baselineY = row4CenterY + cradleHeight * 0.50f
+            val cradleTopY = row4CenterY - cradleHeight * 0.46f
+            val cradleBottomY = row4CenterY + cradleHeight * 0.54f
             val lineWeightRatio = (config.fontWeight.weight.toFloat() / 700f).coerceIn(0.65f, 1.0f)
-            val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = textColor
-                style = Paint.Style.STROKE
-                strokeWidth = (baseFontSize * 0.08f * lineWeightRatio).coerceIn(2.0f, 6.0f)
-                strokeCap = Paint.Cap.ROUND
-            }
-            val textStartX = cursorX + cradleCornerW * 0.75f
-            val lineEndX = (textStartX + minWidth + safeW * 0.022f).coerceAtMost(contentRight)
+            val strokeThickness = (baseFontSize * 0.08f * lineWeightRatio).coerceIn(2.0f, 6.0f)
+            val stemWidth = (1.656f / 8.0f) * cradleHeight
+            val textStartX = cursorX + cradleHeight * 1.4375f
+            val lineEndX = (textStartX + minWidth + safeW * 0.012f).coerceAtMost(contentRight)
+            val innerLineTopY = cradleBottomY - strokeThickness
+            val curveStartY = cradleTopY + (4.36364f / 8.0f) * cradleHeight
+            val outerEndX = cursorX + (3.864f / 8.0f) * cradleHeight
+            val innerEndX = cursorX + (4.784f / 8.0f) * cradleHeight
 
-            canvas.drawLine(textStartX, baselineY, lineEndX, baselineY, linePaint)
+            // Draw the authentic L-bracket cradle as a single cohesive vector shape
+            // with uniform stroke thickness along the entire bottom of the bracket
+            val cradlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = textColor
+                style = Paint.Style.FILL
+            }
+            val cradlePath = Path().apply {
+                moveTo(cursorX, cradleTopY)
+                lineTo(cursorX, curveStartY)
+                // Outer curve down to the baseline
+                cubicTo(
+                    cursorX + (0.100536f / 8.0f) * cradleHeight,
+                    cradleTopY + (6.38793f / 8.0f) * cradleHeight,
+                    cursorX + (1.79166f / 8.0f) * cradleHeight,
+                    cradleBottomY,
+                    outerEndX,
+                    cradleBottomY
+                )
+                // Cohesive bottom line extending under the countdown text to lineEndX
+                lineTo(lineEndX, cradleBottomY)
+                // Rounded cap at the right end of the line
+                arcTo(
+                    RectF(lineEndX - strokeThickness / 2f, innerLineTopY, lineEndX + strokeThickness / 2f, cradleBottomY),
+                    90f,
+                    -180f
+                )
+                // Top of the cohesive bottom line back toward the corner
+                lineTo(innerEndX, innerLineTopY)
+                // Inner curve smoothly transitioning back to the vertical stem
+                val c1x = cursorX + stemWidth + (innerEndX - (cursorX + stemWidth)) * 0.45f
+                val c1y = innerLineTopY
+                val c2x = cursorX + stemWidth
+                val c2y = curveStartY + (innerLineTopY - curveStartY) * 0.55f
+                cubicTo(
+                    c1x, c1y,
+                    c2x, c2y,
+                    cursorX + stemWidth, curveStartY
+                )
+                lineTo(cursorX + stemWidth, cradleTopY)
+                close()
+            }
+            canvas.drawPath(cradlePath, cradlePaint)
 
             // Draw Countdown / Open text resting inside the cradle
             canvas.drawText(countdownText, textStartX + safeW * 0.005f, row4CenterY + textBaselineOffset - cradleHeight * 0.02f, textPaint)

@@ -15,7 +15,7 @@ enum class ClockThemePreset(val id: String, val displayName: String, val descrip
     FROSTED_GLASS("frosted_glass", "Frosted Glass", "Translucent frosted aesthetic with glass border"),
     AMOLED_DARK("dark", "AMOLED Dark", "Pure obsidian dark background with maximum battery saving"),
     NOTHING_RED("red", "MicroNothing Red", "Signature deep ruby red glyphs and accents"),
-    TRANSPARENT_FLOATING("floating", "Floating Glyph", "Ultra-minimal floating time elements without container card")
+    TRANSPARENT_FLOATING("floating", "Floating Glyph", "Ultra-minimal floating time elements with dynamic wallpaper-adaptive typography")
 }
 
 enum class WidgetFontWeight(
@@ -40,6 +40,7 @@ data class WidgetConfig(
     val showCursor: Boolean = false,
     val showCalendar: Boolean = true,
     val useLiveCalendar: Boolean = false,
+    val includeGoogleTasks: Boolean = true,
     val enableQuippyPlaceholders: Boolean = true,
     val fallbackEventTitle: String = "WEEKLY DESIGN SYNC",
     val fallbackMinutes: Int = 6,
@@ -76,6 +77,7 @@ class WidgetPreferences(context: Context) {
             showCursor = prefs.getBoolean("show_cursor", false),
             showCalendar = prefs.getBoolean("show_calendar", true),
             useLiveCalendar = prefs.getBoolean("use_live_calendar", false),
+            includeGoogleTasks = prefs.getBoolean("include_google_tasks", true),
             enableQuippyPlaceholders = prefs.getBoolean("enable_quippy_placeholders", true),
             fallbackEventTitle = prefs.getString("fallback_title", "WEEKLY DESIGN SYNC") ?: "WEEKLY DESIGN SYNC",
             fallbackMinutes = prefs.getInt("fallback_minutes", 6),
@@ -99,6 +101,7 @@ class WidgetPreferences(context: Context) {
             .putBoolean("show_cursor", config.showCursor)
             .putBoolean("show_calendar", config.showCalendar)
             .putBoolean("use_live_calendar", config.useLiveCalendar)
+            .putBoolean("include_google_tasks", config.includeGoogleTasks)
             .putBoolean("enable_quippy_placeholders", config.enableQuippyPlaceholders)
             .putString("fallback_title", config.fallbackEventTitle)
             .putInt("fallback_minutes", config.fallbackMinutes)
