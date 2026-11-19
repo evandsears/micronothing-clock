@@ -39,6 +39,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -511,6 +512,7 @@ fun ClockPreviewScreen(
             condition = displayCond,
             isAllDay = event.isAllDay,
             isTask = event.isTask,
+            hasEvent = event.hasEvent,
             previewBgColor = if (config.themePreset == ClockThemePreset.TRANSPARENT_FLOATING) {
                 systemWallpaperColor ?: 0xFF3E4857.toInt()
             } else null
@@ -554,6 +556,7 @@ fun ClockPreviewScreen(
             .background(MaterialTheme.colorScheme.background)
             .statusBarsPadding()
             .navigationBarsPadding()
+            .displayCutoutPadding()
     ) {
         val isTabletLandscape = maxWidth >= 840.dp
         val isCompactWidth = maxWidth < 400.dp
@@ -1646,6 +1649,50 @@ private fun CalendarTab(
         }
 
         if (config.showCalendar) {
+            // Hide When No Events Toggle Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 8.dp)
+                        ) {
+                            Text(
+                                text = "Hide When No Events",
+                                fontFamily = GeistMonoFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = if (config.hideCalendarWhenNoEvents) {
+                                    "Calendar lines hidden when no events or tasks planned"
+                                } else {
+                                    "Always show calendar lines (shows open day placeholders)"
+                                },
+                                fontFamily = GeistMonoFamily,
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Switch(
+                            checked = config.hideCalendarWhenNoEvents,
+                            onCheckedChange = { onConfigChanged(config.copy(hideCalendarWhenNoEvents = it)) }
+                        )
+                    }
+                }
+            }
+
             // Live Calendar Settings Card
             Card(
                 modifier = Modifier.fillMaxWidth(),

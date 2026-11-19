@@ -1,47 +1,47 @@
 # MicroNothing Clock Proguard Rules
 
-# Keep Widget, Renderer and Data classes from being obfuscated or stripped by R8
--keep class com.micro.nothingclock.widget.** { *; }
--keep class com.micro.nothingclock.data.** { *; }
--keep class com.micro.nothingclock.ui.** { *; }
--keep class com.micro.nothingclock.MainActivity { *; }
+# Keep AndroidManifest entrypoints (Activity, AppWidgetProvider, BroadcastReceiver)
+-keep class com.micro.nothingclock.MainActivity {
+    public <init>();
+    protected void onCreate(android.os.Bundle);
+}
+-keep class com.micro.nothingclock.widget.NothingClockWidgetProvider {
+    public <init>();
+}
+-keep class com.micro.nothingclock.widget.WidgetAlarmReceiver {
+    public <init>();
+}
+-keep class * extends android.appwidget.AppWidgetProvider {
+    public <init>();
+    public void onReceive(android.content.Context, android.content.Intent);
+    public void onUpdate(android.content.Context, android.appwidget.AppWidgetManager, int[]);
+    public void onAppWidgetOptionsChanged(android.content.Context, android.appwidget.AppWidgetManager, int, android.os.Bundle);
+    public void onDeleted(android.content.Context, int[]);
+    public void onEnabled(android.content.Context);
+    public void onDisabled(android.content.Context);
+    public void onRestored(android.content.Context, int[], int[]);
+}
+-keep class * extends android.content.BroadcastReceiver {
+    public <init>();
+    public void onReceive(android.content.Context, android.content.Intent);
+}
 
-# Keep AppWidgetProvider and BroadcastReceiver implementations
--keep class * extends android.appwidget.AppWidgetProvider { *; }
--keep class * extends android.content.BroadcastReceiver { *; }
+# Keep AndroidX EdgeToEdge classes & methods un-obfuscated and un-inlined so Google Play Console
+# static analysis detects EdgeToEdge.enable() and recognizes AndroidX backward-compatibility calls
+-keep class androidx.activity.EdgeToEdge* { *; }
+-keep class androidx.activity.SystemBarStyle* { *; }
 
 # AndroidX Startup (prevents reflection failure in InitializationProvider on app launch)
 -keep class androidx.startup.** { *; }
 -keep class * extends androidx.startup.Initializer { *; }
 -keep class * implements androidx.startup.Initializer { *; }
 
-# AndroidX WorkManager & Room (prevents fatal startup crash if WorkManager is pulled in transitively)
--keep class androidx.work.** { *; }
--keep class androidx.work.impl.** { *; }
--keep class * extends androidx.work.Worker { *; }
--keep class * extends androidx.work.ListenableWorker { *; }
--keep class * extends androidx.work.InputMerger { *; }
--keep class * extends androidx.room.RoomDatabase { *; }
--keep class * extends androidx.room.RoomDatabase$Callback { *; }
--keep class androidx.room.** { *; }
--keep class androidx.room.paging.** { *; }
--dontwarn androidx.work.**
--dontwarn androidx.room.**
-
-# AndroidX Compose & Lifecycle
--keep class androidx.compose.** { *; }
--dontwarn androidx.compose.**
--keep class androidx.lifecycle.** { *; }
--dontwarn androidx.lifecycle.**
--keep class androidx.profileinstaller.** { *; }
--dontwarn androidx.profileinstaller.**
-
-# Kotlin Reflection & Annotations
--keepattributes *Annotation*,InnerClasses,EnclosingMethod,Signature
--keepclassmembers class * {
-    *** Companion;
+# Keep enum methods for safe enum lookups
+-keepclassmembers enum * {
+    public static **[] values();
+    public static ** valueOf(java.lang.String);
 }
 
-# Preserve line numbers and original source file names for readable Play Console stack traces
--keepattributes SourceFile,LineNumberTable
+# Preserve annotations and line numbers for readable Play Console crash stack traces
+-keepattributes *Annotation*,InnerClasses,EnclosingMethod,Signature,SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile

@@ -772,6 +772,10 @@ object NothingClockRenderer {
         )
     }
 
+    fun shouldShowCalendar(config: WidgetConfig, hasEvent: Boolean = true): Boolean {
+        return config.showCalendar && (!config.hideCalendarWhenNoEvents || hasEvent)
+    }
+
     fun renderToBitmap(
         context: Context?,
         width: Int,
@@ -783,6 +787,7 @@ object NothingClockRenderer {
         condition: String = "SUNNY",
         isAllDay: Boolean = false,
         isTask: Boolean = false,
+        hasEvent: Boolean = true,
         previewBgColor: Int? = null
     ): Bitmap {
         val safeW = if (width > 0) width else 1024
@@ -897,7 +902,7 @@ object NothingClockRenderer {
         }
         val availableHeight = (safeH - topPadding - bottomPadding).coerceAtLeast(80f)
 
-        val showCalendar = config.showCalendar
+        val showCalendar = shouldShowCalendar(config, hasEvent)
         val displayEvent = eventTitle.uppercase().trim()
 
         // Row Heights and centers:

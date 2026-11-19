@@ -4,6 +4,7 @@ import com.micro.nothingclock.data.GoogleTaskItem
 import com.micro.nothingclock.data.TasksRepository
 import com.micro.nothingclock.data.UpcomingCalendarEvent
 import com.micro.nothingclock.data.WidgetConfig
+import com.micro.nothingclock.widget.NothingClockRenderer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -72,5 +73,34 @@ class ModelsAndConfigTest {
         assertTrue("Google Tasks integration should be enabled by default", config.includeGoogleTasks)
         assertEquals("WEEKLY DESIGN SYNC", config.fallbackEventTitle)
         assertEquals(6, config.fallbackMinutes)
+        assertTrue("showCalendar should be true by default", config.showCalendar)
+        assertFalse("hideCalendarWhenNoEvents should be false by default to always show the two lines", config.hideCalendarWhenNoEvents)
+    }
+
+    @Test
+    fun testShouldShowCalendar_defaultBehaviorAlwaysShowsLines() {
+        val defaultConfig = WidgetConfig(showCalendar = true, hideCalendarWhenNoEvents = false)
+        // With default setting, 2 calendar lines are shown even if hasEvent is false (open day placeholder)
+        assertTrue(NothingClockRenderer.shouldShowCalendar(defaultConfig, hasEvent = true))
+        assertTrue(NothingClockRenderer.shouldShowCalendar(defaultConfig, hasEvent = false))
+    }
+
+    @Test
+    fun testShouldShowCalendar_hideWhenNoEventsToggle() {
+        val cleanConfig = WidgetConfig(showCalendar = true, hideCalendarWhenNoEvents = true)
+        // When toggle enabled: shows 2 lines if hasEvent is true, hides lines if hasEvent is false
+        assertTrue("Should show lines when there is an active event or task", NothingClockRenderer.shouldShowCalendar(cleanConfig, hasEvent = true))
+        assertFalse("Should hide lines when there are no events or tasks", NothingClockRenderer.shouldShowCalendar(cleanConfig, hasEvent = false))
+    }
+
+    @Test
+    fun testShouldShowCalendar_masterSwitchDisabledOverridesToggle() {
+        val disabledConfig = WidgetConfig(showCalendar = false, hideCalendarWhenNoEvents = false)
+        assertFalse(NothingClockRenderer.shouldShowCalendar(disabledConfig, hasEvent = true))
+        assertFalse(NothingClockRenderer.shouldShowCalendar(disabledConfig, hasEvent = false))
+
+        val disabledWithToggle = WidgetConfig(showCalendar = false, hideCalendarWhenNoEvents = true)
+        assertFalse(NothingClockRenderer.shouldShowCalendar(disabledWithToggle, hasEvent = true))
+        assertFalse(NothingClockRenderer.shouldShowCalendar(disabledWithToggle, hasEvent = false))
     }
 }

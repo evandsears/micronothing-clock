@@ -145,7 +145,8 @@ class NothingClockWidgetProvider : AppWidgetProvider() {
             canvasWidth: Int = 1024,
             canvasHeight: Int = 461,
             isAllDay: Boolean = false,
-            isTask: Boolean = false
+            isTask: Boolean = false,
+            hasEvent: Boolean = true
         ): RemoteViews {
             val bitmap = NothingClockRenderer.renderToBitmap(
                 context = context,
@@ -157,7 +158,8 @@ class NothingClockWidgetProvider : AppWidgetProvider() {
                 temp = temp,
                 condition = condition,
                 isAllDay = isAllDay,
-                isTask = isTask
+                isTask = isTask,
+                hasEvent = hasEvent
             )
 
             val views = RemoteViews(context.packageName, R.layout.widget_nothing_clock)
@@ -203,7 +205,8 @@ class NothingClockWidgetProvider : AppWidgetProvider() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
-            if (config.showCalendar) {
+            val shouldShowCalendar = NothingClockRenderer.shouldShowCalendar(config, hasEvent)
+            if (shouldShowCalendar) {
                 views.setViewVisibility(R.id.hotspot_container_calendar, View.VISIBLE)
                 views.setViewVisibility(R.id.hotspot_container_no_calendar, View.GONE)
 
@@ -265,7 +268,8 @@ class NothingClockWidgetProvider : AppWidgetProvider() {
                 canvasWidth = canvasWidth,
                 canvasHeight = canvasHeight,
                 isAllDay = event.isAllDay,
-                isTask = event.isTask
+                isTask = event.isTask,
+                hasEvent = event.hasEvent
             )
         }
 
@@ -316,7 +320,8 @@ class NothingClockWidgetProvider : AppWidgetProvider() {
                     canvasWidth = w,
                     canvasHeight = h,
                     isAllDay = initialCalendar.isAllDay,
-                    isTask = initialCalendar.isTask
+                    isTask = initialCalendar.isTask,
+                    hasEvent = initialCalendar.hasEvent
                 )
                 appWidgetManager.updateAppWidget(appWidgetId, initialViews)
             } catch (e: Exception) {
@@ -350,7 +355,8 @@ class NothingClockWidgetProvider : AppWidgetProvider() {
                                 canvasWidth = w,
                                 canvasHeight = h,
                                 isAllDay = nextEvent.isAllDay,
-                                isTask = nextEvent.isTask
+                                isTask = nextEvent.isTask,
+                                hasEvent = nextEvent.hasEvent
                             )
                             appWidgetManager.updateAppWidget(appWidgetId, intermediateViews)
                         }
@@ -391,7 +397,8 @@ class NothingClockWidgetProvider : AppWidgetProvider() {
                             canvasWidth = w,
                             canvasHeight = h,
                             isAllDay = finalEvent.isAllDay,
-                            isTask = finalEvent.isTask
+                            isTask = finalEvent.isTask,
+                            hasEvent = finalEvent.hasEvent
                         )
                         appWidgetManager.updateAppWidget(appWidgetId, liveViews)
                     } catch (e: Exception) {
@@ -453,7 +460,8 @@ class NothingClockWidgetProvider : AppWidgetProvider() {
                         canvasWidth = w,
                         canvasHeight = h,
                         isAllDay = initialCalendar.isAllDay,
-                        isTask = initialCalendar.isTask
+                        isTask = initialCalendar.isTask,
+                        hasEvent = initialCalendar.hasEvent
                     )
                     appWidgetManager.updateAppWidget(id, initialViews)
                 } catch (e: Exception) {
@@ -491,7 +499,8 @@ class NothingClockWidgetProvider : AppWidgetProvider() {
                                     canvasWidth = w,
                                     canvasHeight = h,
                                     isAllDay = nextEvent.isAllDay,
-                                    isTask = nextEvent.isTask
+                                    isTask = nextEvent.isTask,
+                                    hasEvent = nextEvent.hasEvent
                                 )
                                 appWidgetManager.updateAppWidget(appWidgetId, intermediateViews)
                             }
@@ -536,7 +545,8 @@ class NothingClockWidgetProvider : AppWidgetProvider() {
                                 canvasWidth = w,
                                 canvasHeight = h,
                                 isAllDay = finalEvent.isAllDay,
-                                isTask = finalEvent.isTask
+                                isTask = finalEvent.isTask,
+                                hasEvent = finalEvent.hasEvent
                             )
                             appWidgetManager.updateAppWidget(appWidgetId, liveViews)
                         }

@@ -32,6 +32,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Separated local calendar queries from network tasks (Google Tasks & Weather) so calendar events update in milliseconds without waiting for network synchronization.
 
 ### 🌟 Added
+- **Optional Clean Display: Hide Calendar When No Events or Tasks**:
+  - Added a toggle under the Calendar tab ("Hide When No Events") allowing users who prefer a minimal, uncluttered layout to automatically hide the two calendar and countdown lines when there are no events or tasks planned for the day.
+  - Keeps the default behavior as always displaying the two lines (with quippy open day placeholders like "YOUR DAY IS OPEN" / "ALL CLEAR") for users who prefer the full 4-row layout.
+  - Automatically transitions between the clean 2-row layout (when schedule is clear) and full 4-row layout (when events or tasks are scheduled).
+  - Dynamically updates touch hotspots between 2-row and 4-row configurations on homescreen widgets so tapping remains accurately mapped to clock, weather, or agenda.
+  - Fully integrated into live in-app preview and persistent widget preferences.
+
 - **Dynamic Wallpaper-Adaptive Typography for Floating Glyph Preset**:
   - The Floating Glyph (no card background) widget now dynamically adapts its typography and pill elements to match the user's wallpaper, faithfully replicating Nothing OS 5.0 micrographics aesthetics.
   - Automatically samples system Monet dynamic color tokens (`system_accent1_100` / `system_accent1_900`) on Android 12+ (Nothing OS 2.0 / 3.0 / 5.0) and extracts ambient tones from `WallpaperManager` across Android 8.1+.

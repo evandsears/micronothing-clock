@@ -39,6 +39,7 @@ data class WidgetConfig(
     val is24Hour: Boolean = false,
     val showCursor: Boolean = false,
     val showCalendar: Boolean = true,
+    val hideCalendarWhenNoEvents: Boolean = false,
     val useLiveCalendar: Boolean = false,
     val includeGoogleTasks: Boolean = true,
     val enableQuippyPlaceholders: Boolean = true,
@@ -76,6 +77,7 @@ class WidgetPreferences(context: Context) {
             is24Hour = prefs.getBoolean("is_24_hour", false),
             showCursor = prefs.getBoolean("show_cursor", false),
             showCalendar = prefs.getBoolean("show_calendar", true),
+            hideCalendarWhenNoEvents = prefs.getBoolean("hide_calendar_when_no_events", false),
             useLiveCalendar = prefs.getBoolean("use_live_calendar", false),
             includeGoogleTasks = prefs.getBoolean("include_google_tasks", true),
             enableQuippyPlaceholders = prefs.getBoolean("enable_quippy_placeholders", true),
@@ -100,6 +102,7 @@ class WidgetPreferences(context: Context) {
             .putBoolean("is_24_hour", config.is24Hour)
             .putBoolean("show_cursor", config.showCursor)
             .putBoolean("show_calendar", config.showCalendar)
+            .putBoolean("hide_calendar_when_no_events", config.hideCalendarWhenNoEvents)
             .putBoolean("use_live_calendar", config.useLiveCalendar)
             .putBoolean("include_google_tasks", config.includeGoogleTasks)
             .putBoolean("enable_quippy_placeholders", config.enableQuippyPlaceholders)

@@ -11,8 +11,8 @@ android {
         applicationId = "com.micro.nothingclock"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.3.1"
+        versionCode = 12
+        versionName = "1.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
