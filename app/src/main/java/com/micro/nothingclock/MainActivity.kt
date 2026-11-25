@@ -20,6 +20,9 @@ import com.micro.nothingclock.ui.theme.MicroNothingClockTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) {
+            WidgetPreferences(this).incrementAppLaunchCount()
+        }
         enableEdgeToEdge()
         setContent {
             val context = LocalContext.current

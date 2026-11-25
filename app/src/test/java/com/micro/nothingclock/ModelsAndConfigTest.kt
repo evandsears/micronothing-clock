@@ -4,6 +4,7 @@ import com.micro.nothingclock.data.GoogleTaskItem
 import com.micro.nothingclock.data.TasksRepository
 import com.micro.nothingclock.data.UpcomingCalendarEvent
 import com.micro.nothingclock.data.WidgetConfig
+import com.micro.nothingclock.data.WidgetPreferences
 import com.micro.nothingclock.widget.NothingClockRenderer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -102,5 +103,89 @@ class ModelsAndConfigTest {
         val disabledWithToggle = WidgetConfig(showCalendar = false, hideCalendarWhenNoEvents = true)
         assertFalse(NothingClockRenderer.shouldShowCalendar(disabledWithToggle, hasEvent = true))
         assertFalse(NothingClockRenderer.shouldShowCalendar(disabledWithToggle, hasEvent = false))
+    }
+
+    @Test
+    fun testShouldShowRatingPrompt_triggersAtThresholdWhenEligible() {
+        val threshold = WidgetPreferences.DEFAULT_INITIAL_RATING_THRESHOLD
+
+        // Below threshold -> false
+        assertFalse(
+            WidgetPreferences.shouldShowRatingPrompt(
+                launchCount = threshold - 1,
+                nextPromptCount = threshold,
+                hasRatedOrDismissed = false,
+                hasCompletedWalkthrough = true
+            )
+        )
+
+        // At threshold -> true
+        assertTrue(
+            WidgetPreferences.shouldShowRatingPrompt(
+                launchCount = threshold,
+                nextPromptCount = threshold,
+                hasRatedOrDismissed = false,
+                hasCompletedWalkthrough = true
+            )
+        )
+
+        // Above threshold -> true
+        assertTrue(
+            WidgetPreferences.shouldShowRatingPrompt(
+                launchCount = threshold + 2,
+                nextPromptCount = threshold,
+                hasRatedOrDismissed = false,
+                hasCompletedWalkthrough = true
+            )
+        )
+    }
+
+    @Test
+    fun testShouldShowRatingPrompt_suppressedWhenWalkthroughIncompleteOrAlreadyRated() {
+        val threshold = WidgetPreferences.DEFAULT_INITIAL_RATING_THRESHOLD
+
+        // Walkthrough not finished yet -> false
+        assertFalse(
+            WidgetPreferences.shouldShowRatingPrompt(
+                launchCount = threshold + 5,
+                nextPromptCount = threshold,
+                hasRatedOrDismissed = false,
+                hasCompletedWalkthrough = false
+            )
+        )
+
+        // Already rated or dismissed -> false
+        assertFalse(
+            WidgetPreferences.shouldShowRatingPrompt(
+                launchCount = threshold + 5,
+                nextPromptCount = threshold,
+                hasRatedOrDismissed = true,
+                hasCompletedWalkthrough = true
+            )
+        )
+    }
+
+    @Test
+    fun testShouldShowRatingPrompt_snoozedUntilNextTarget() {
+        val initialThreshold = WidgetPreferences.DEFAULT_INITIAL_RATING_THRESHOLD
+        val snoozedTarget = initialThreshold + WidgetPreferences.DEFAULT_SNOOZE_LAUNCH_INTERVAL
+
+        assertFalse(
+            WidgetPreferences.shouldShowRatingPrompt(
+                launchCount = initialThreshold + 1,
+                nextPromptCount = snoozedTarget,
+                hasRatedOrDismissed = false,
+                hasCompletedWalkthrough = true
+            )
+        )
+
+        assertTrue(
+            WidgetPreferences.shouldShowRatingPrompt(
+                launchCount = snoozedTarget,
+                nextPromptCount = snoozedTarget,
+                hasRatedOrDismissed = false,
+                hasCompletedWalkthrough = true
+            )
+        )
     }
 }

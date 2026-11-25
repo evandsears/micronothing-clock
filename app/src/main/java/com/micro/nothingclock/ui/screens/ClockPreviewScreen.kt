@@ -73,6 +73,7 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Tune
@@ -160,6 +161,7 @@ fun ClockPreviewScreen(
     val weatherRepo = remember { WeatherRepository(context) }
     var isWeatherRefreshing by remember { mutableStateOf(false) }
     var showWalkthrough by remember { mutableStateOf(!prefs.hasCompletedWalkthrough()) }
+    var showRatePrompt by remember { mutableStateOf(!showWalkthrough && prefs.shouldShowRatingPrompt()) }
 
     val onGrantExactAlarm: () -> Unit = {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -581,7 +583,8 @@ fun ClockPreviewScreen(
                         config = config,
                         onConfigChanged = { updateConfig(it) },
                         onManualRefresh = onManualRefresh,
-                        onLaunchWalkthrough = { showWalkthrough = true }
+                        onLaunchWalkthrough = { showWalkthrough = true },
+                        onRateApp = { showRatePrompt = true }
                     )
                     PreviewSizeDropdown(
                         selectedHeight = previewHeight,
@@ -656,7 +659,8 @@ fun ClockPreviewScreen(
                                 onGrantBatteryOpt = onGrantBatteryOpt,
                                 onConfigChanged = { updateConfig(it) },
                                 onManualRefresh = onManualRefresh,
-                                onLaunchWalkthrough = { showWalkthrough = true }
+                                onLaunchWalkthrough = { showWalkthrough = true },
+                                onRateApp = { showRatePrompt = true }
                             )
                         }
                     }
@@ -682,7 +686,8 @@ fun ClockPreviewScreen(
                         config = config,
                         onConfigChanged = { updateConfig(it) },
                         onManualRefresh = onManualRefresh,
-                        onLaunchWalkthrough = { showWalkthrough = true }
+                        onLaunchWalkthrough = { showWalkthrough = true },
+                        onRateApp = { showRatePrompt = true }
                     )
 
                     LivePreviewCard(
@@ -754,7 +759,8 @@ fun ClockPreviewScreen(
                             onGrantBatteryOpt = onGrantBatteryOpt,
                             onConfigChanged = { updateConfig(it) },
                             onManualRefresh = onManualRefresh,
-                            onLaunchWalkthrough = { showWalkthrough = true }
+                            onLaunchWalkthrough = { showWalkthrough = true },
+                            onRateApp = { showRatePrompt = true }
                         )
                     }
 
@@ -785,6 +791,25 @@ fun ClockPreviewScreen(
                 }
             )
         }
+
+        if (showRatePrompt && !showWalkthrough) {
+            RateAppPromptDialog(
+                onRateNow = {
+                    prefs.setRatedOrDismissed(true)
+                    showRatePrompt = false
+                    openPlayStoreForRating(context)
+                },
+                onRemindLater = {
+                    prefs.snoozeRatingPrompt()
+                    showRatePrompt = false
+                },
+                onNoThanks = {
+                    prefs.setRatedOrDismissed(true)
+                    showRatePrompt = false
+                    Toast.makeText(context, "Thanks for supporting MicroNothing!", Toast.LENGTH_SHORT).show()
+                }
+            )
+        }
     }
 }
 
@@ -793,7 +818,8 @@ private fun AppHeader(
     config: WidgetConfig,
     onConfigChanged: (WidgetConfig) -> Unit,
     onManualRefresh: () -> Unit,
-    onLaunchWalkthrough: () -> Unit
+    onLaunchWalkthrough: () -> Unit,
+    onRateApp: () -> Unit
 ) {
     var themeMenuExpanded by remember { mutableStateOf(false) }
 
@@ -961,6 +987,21 @@ private fun AppHeader(
                         onClick = {
                             themeMenuExpanded = false
                             onLaunchWalkthrough()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFFFB300), modifier = Modifier.size(18.dp))
+                                Text("Rate on Google Play", fontFamily = GeistMonoFamily, fontSize = 12.sp)
+                            }
+                        },
+                        onClick = {
+                            themeMenuExpanded = false
+                            onRateApp()
                         }
                     )
                 }
@@ -2464,7 +2505,8 @@ private fun SystemAndThemeTab(
     onGrantBatteryOpt: () -> Unit = {},
     onConfigChanged: (WidgetConfig) -> Unit,
     onManualRefresh: () -> Unit,
-    onLaunchWalkthrough: () -> Unit
+    onLaunchWalkthrough: () -> Unit,
+    onRateApp: () -> Unit = {}
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         // App Theme & Dynamic Color Card
@@ -2736,6 +2778,51 @@ private fun SystemAndThemeTab(
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("PIN WIDGET TO HOME SCREEN", fontFamily = GeistMonoFamily, fontSize = 11.sp)
+                }
+            }
+        }
+
+        // Support & Rating Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFFFB300), modifier = Modifier.size(18.dp))
+                    Text(
+                        text = "ENJOYING MICRONOTHING?",
+                        fontFamily = GeistMonoFamily,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                Text(
+                    text = "Built by an indie developer with zero ads or tracking. Leaving a quick 5-star rating on Google Play helps others find the widget!",
+                    fontFamily = GeistMonoFamily,
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 16.sp
+                )
+
+                Button(
+                    onClick = onRateApp,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                ) {
+                    Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("RATE 5 STARS ON GOOGLE PLAY", fontFamily = GeistMonoFamily, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                 }
             }
         }

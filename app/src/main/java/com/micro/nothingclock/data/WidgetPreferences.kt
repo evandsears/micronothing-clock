@@ -129,4 +129,59 @@ class WidgetPreferences(context: Context) {
     fun resetWalkthrough() {
         prefs.edit().putBoolean("has_completed_walkthrough", false).apply()
     }
+
+    fun getAppLaunchCount(): Int {
+        return prefs.getInt(KEY_APP_LAUNCH_COUNT, 0)
+    }
+
+    fun incrementAppLaunchCount(): Int {
+        val nextCount = getAppLaunchCount() + 1
+        prefs.edit().putInt(KEY_APP_LAUNCH_COUNT, nextCount).apply()
+        return nextCount
+    }
+
+    fun hasRatedOrDismissed(): Boolean {
+        return prefs.getBoolean(KEY_HAS_RATED_OR_DISMISSED, false)
+    }
+
+    fun setRatedOrDismissed(dismissed: Boolean = true) {
+        prefs.edit().putBoolean(KEY_HAS_RATED_OR_DISMISSED, dismissed).apply()
+    }
+
+    fun getRatingNextPromptCount(): Int {
+        return prefs.getInt(KEY_RATING_NEXT_PROMPT_COUNT, DEFAULT_INITIAL_RATING_THRESHOLD)
+    }
+
+    fun snoozeRatingPrompt(snoozeLaunches: Int = DEFAULT_SNOOZE_LAUNCH_INTERVAL) {
+        val nextTarget = getAppLaunchCount() + snoozeLaunches
+        prefs.edit().putInt(KEY_RATING_NEXT_PROMPT_COUNT, nextTarget).apply()
+    }
+
+    fun shouldShowRatingPrompt(): Boolean {
+        return shouldShowRatingPrompt(
+            launchCount = getAppLaunchCount(),
+            nextPromptCount = getRatingNextPromptCount(),
+            hasRatedOrDismissed = hasRatedOrDismissed(),
+            hasCompletedWalkthrough = hasCompletedWalkthrough()
+        )
+    }
+
+    companion object {
+        const val KEY_APP_LAUNCH_COUNT = "app_launch_count"
+        const val KEY_HAS_RATED_OR_DISMISSED = "has_rated_or_dismissed_prompt"
+        const val KEY_RATING_NEXT_PROMPT_COUNT = "rating_next_prompt_count"
+        const val DEFAULT_INITIAL_RATING_THRESHOLD = 3
+        const val DEFAULT_SNOOZE_LAUNCH_INTERVAL = 4
+
+        fun shouldShowRatingPrompt(
+            launchCount: Int,
+            nextPromptCount: Int,
+            hasRatedOrDismissed: Boolean,
+            hasCompletedWalkthrough: Boolean
+        ): Boolean {
+            if (!hasCompletedWalkthrough) return false
+            if (hasRatedOrDismissed) return false
+            return launchCount >= nextPromptCount
+        }
+    }
 }
